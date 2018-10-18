@@ -365,68 +365,66 @@ class Parser:
         return key, val
 
     def _parse_key(self):  # type: () -> Key
+        with self._state:
+            return self._parse_dotted_key()
+
+        with self._state:
+            return self._parse_basic_key()
+
+        with self._state:
+            return self._parse_literal_key()
+
+        with self._state:
+            return self._parse_bare_key()
+
+        raise self.parse_error(UnexpectedCharError, self._current)
+
+    def _parse_dotted_key(self):  # type: () -> Key
         """
         Parses a Key at the current position;
         WS before the key must be exhausted first at the callsite.
         """
-        if self._current in "\"'":
-            return self._parse_quoted_key()
-        else:
-            return self._parse_bare_key()
-
-    def _parse_quoted_key(self):  # type: () -> Key
-        """
-        Parses a key enclosed in either single or double quotes.
-        """
-        quote_style = self._current
-        key_type = None
-        dotted = False
-        for t in KeyType:
-            if t.value == quote_style:
-                key_type = t
-                break
-
-        if key_type is None:
-            raise RuntimeError("Should not have entered _parse_quoted_key()")
-
-        self.inc()
-        self.mark()
-
-        while self._current != quote_style and self.inc():
-            pass
-
-        key = self.extract()
+        key = self._parse_key_part()
 
         if self._current == ".":
-            self.inc()
-            dotted = True
-            key += "." + self._parse_key().as_string()
-            key_type = KeyType.Bare
-        else:
-            self.inc()
+            self.inc(exception=True)
+            key = key.as_string() + "." + self._parse_key().as_string()
+            key = Key(key, KeyType.Bare, "", True)
 
-        return Key(key, key_type, "", dotted)
+        return key
+
+    def _parse_key_part(self):
+        with self._state:
+            return self._parse_basic_key()
+
+        with self._state:
+            return self._parse_literal_key()
+
+        with self._state:
+            return self._parse_bare_key()
+
+        raise self.parse_error(UnexpectedCharError, self._current)
 
     def _parse_bare_key(self):  # type: () -> Key
         """
         Parses a bare key.
         """
-        key_type = None
-        dotted = False
-
-        self.mark()
+        mark = self._idx
         while self._current.is_bare_key_char() and self.inc():
             pass
+        key = self._src[mark : self._idx]
 
-        key = self.extract()
+        return Key(key, KeyType.Bare, "", False)
 
-        if self._current == ".":
-            self.inc()
-            dotted = True
-            key += "." + self._parse_key().as_string()
-            key_type = KeyType.Bare
+    def _parse_basic_key(self):
+        key = decode(self._parse_string(StringType.SLB, multiline=False)._original)
 
-        return Key(key, key_type, "", dotted)
+        return Key(key, KeyType.Basic, "", False)
+
+    def _parse_literal_key(self):
+        key = decode(self._parse_string(StringType.SLL, multiline=False)._original)
+
+        return Key(key, KeyType.Literal, "", False)
 
     def _handle_dotted_key(
         self, container, key, value
@@ -678,7 +676,7 @@ class Parser:
 
         raise self.parse_error(InvalidCharInStringError, self._current)
 
-    def _parse_string(self, delim):  # type: (str) -> Item
+    def _parse_string(self, delim, multiline=True):  # type: (str) -> Item
         delim = StringType(delim)
         assert delim.is_singleline()
 
@@ -690,7 +688,8 @@ class Parser:
         # (middle of string or middle of delim)
         self.inc(exception=UnexpectedEofError)
 
-        if self._current == delim.unit:
+        # only check for second/third delim if we are interested in multiline strings
+        if multiline and self._current == delim.unit:
             # consume the closing/second delim, we do not care if EOF occurs as
             # that would simply imply an empty single line string
             if not self.inc() or self._current != delim.unit:
