@@ -101,15 +101,26 @@ class InvalidNumberOrDateError(ParseError):
         super(InvalidNumberOrDateError, self).__init__(line, col, message=message)
 
 
-class InvalidUnicodeValueError(ParseError):
+class TrailingCommaError(ParseError):
     """
-    A unicode code was improperly specified.
+    An InlineTable cannot have a trailing comma.
     """
 
     def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Invalid unicode value"
+        message = "Cannot have trailing comma"
 
-        super(InvalidUnicodeValueError, self).__init__(line, col, message=message)
+        super(TrailingCommaError, self).__init__(line, col, message=message)
+
+
+class LeadingZeroError(ParseError):
+    """
+    A numeric has invalid leading zeros.
+    """
+
+    def __init__(self, line, col):  # type: (int, int) -> None
+        message = "Cannot have leading zeros"
+
+        super(LeadingZeroError, self).__init__(line, col, message=message)
 
 
 class UnexpectedCharError(ParseError):

@@ -9,6 +9,7 @@ from typing import Tuple
 
 from ._compat import PY2
 from ._compat import unicode
+from ._compat import decode
 from .exceptions import UnexpectedEofError
 from .exceptions import UnexpectedCharError
 from .exceptions import ParseError
@@ -72,6 +73,11 @@ class _StateHandler:
 
 class Source(unicode):
     EOF = TOMLChar("\0")
+
+    def __new__(cls, value):
+        if isinstance(value, cls):
+            return value
+        return super(Source, cls).__new__(cls, decode(value))
 
     def __init__(self, _):  # type: (unicode) -> None
         super(Source, self).__init__()
@@ -148,15 +154,25 @@ class Source(unicode):
         """
         Consume chars until min/max is satisfied is valid.
         """
+        count = 0
         while self.current in chars and max != 0:
             min -= 1
             max -= 1
+            count += 1
             if not self.inc():
                 break
 
         # failed to consume minimum number of characters
         if min > 0:
-            self.parse_error(UnexpectedCharError)
+            raise self.parse_error(UnexpectedCharError, self.current)
+
+        return count
+
+    def start(self):  # type: () -> bool
+        """
+        Returns True if the parser is at the start of the input.
+        """
+        return self._idx == 0
 
     def end(self):  # type: () -> bool
         """
