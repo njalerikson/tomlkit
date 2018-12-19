@@ -837,8 +837,12 @@ class TableParser(_ItemParser):
             # looking at an array of Tables where the current Table needs to be
             # inserted into the array (and if the array doesn't exist yet it needs to
             # be created)
-            tmp = inst.setdefault(key, []) if aot else inst
-            tbl = self.__assign__(tmp, key, {})
+            if aot:
+                arr = inst.setdefault(key, [])
+                arr.append({})
+                tbl = arr[-1]
+            else:
+                tbl = inst.setdefault(key, {})
             if comment:
                 tbl.comment = comment
             tbl.complex = True
