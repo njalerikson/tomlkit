@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import string
-from abc import ABC, abstractmethod
 from collections.abc import Mapping
 import datetime as dt
 from re import compile as r, VERBOSE
@@ -8,8 +6,8 @@ from re import compile as r, VERBOSE
 from ..source import Source
 from ..exceptions import UnexpectedCharError, LeadingZeroError
 from .._compat import timezone
-from .._utils import _utc
-from ..toml_char import TOMLChar
+from .._compat import unicode
+from .._utils import _utc, chars
 
 from ..items import Comment
 from ..items import Key, KeyType
@@ -22,13 +20,13 @@ from ._utils import parse_word, parse_string
 
 
 def consume_nl(src):
-    if src.consume(TOMLChar.NL) == 0 and not src.end():
+    if src.consume(chars.nl) == 0 and not src.end():
         raise src.parse_error(UnexpectedCharError, src.current)
 
 
-class _Parser(ABC):
+class _Parser:
+    __slots__ = ["__klass__"]
     # __klass__ = ???
-    __slots__ = []
 
     def parse(self, src, **kwargs):
         # ensure that the src is a valid Source object
@@ -52,9 +50,8 @@ class _Parser(ABC):
         with src.state:
             return self.__inst__(check, src, **kwargs)
 
-    @abstractmethod
     def __check__(self, src):
-        pass
+        raise NotImplementedError
 
     def __parse__(self, check, src, **kwargs):
         raise NotImplementedError
@@ -76,20 +73,23 @@ class _Parser(ABC):
 
 
 class _ValueParser(_Parser):
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
+
     def __inst__(self, check, src, parent, key, **kwargs):
         value = self.__klass__(*self.__parse__(check, src, **kwargs))
         return self.__assign__(parent, key, value)
 
 
 class _ContainerParser(_Parser):
-    pass
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
 
 
 class KeyParser(_Parser):
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
     __klass__ = Key
 
     def __check__(self, src):
-        if src.current in TOMLChar.BARE:
+        if src.current in chars.bare:
             return KeyType.BARE
         elif src.current == KeyType.BASIC.open:
             return KeyType.BASIC
@@ -99,7 +99,7 @@ class KeyParser(_Parser):
     def __parse__(self, style, src):
         if style.is_bare():
             mark = src.idx
-            src.consume(TOMLChar.BARE)
+            src.consume(chars.bare)
             value = src[mark : src.idx]
         else:
             value, style, _ = parse_string(style, src, multi=False)
@@ -128,7 +128,7 @@ class _KeysParser(_Parser):
         first = True
         while src.current != term:
             # leading indent
-            src.consume(TOMLChar.SPACES)
+            src.consume(chars.spaces)
 
             # skip additional parsing if we find a closing bracket
             if src.current == term:
@@ -138,7 +138,7 @@ class _KeysParser(_Parser):
                 src.consume(".", min=1, max=1)
 
             # spacing
-            src.consume(TOMLChar.SPACES)
+            src.consume(chars.spaces)
 
             # key
             keys.append(self.key.parse(src))
@@ -148,6 +148,8 @@ class _KeysParser(_Parser):
 
 
 class ItemKeysParser(_KeysParser):
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
+
     def __check__(self, src):
         return True
 
@@ -190,7 +192,7 @@ class TableKeysParser(_KeysParser):
         src.consume("]", min=open_count, max=open_count)
 
         # consume any spacing/newline
-        src.consume(TOMLChar.SPACES)
+        src.consume(chars.spaces)
 
         # inline comment
         comment = None
@@ -212,6 +214,7 @@ class TableKeysParser(_KeysParser):
 
 
 class CommentParser(_Parser):
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
     __klass__ = Comment
 
     def __check__(self, src):
@@ -224,7 +227,7 @@ class CommentParser(_Parser):
         mark = src._idx
 
         # consume everything until we find newline/EOF
-        while src.current not in TOMLChar.NL and src.inc():
+        while src.current not in chars.nl and src.inc():
             pass
 
         value = src[mark : src._idx]
@@ -236,6 +239,7 @@ class CommentParser(_Parser):
 
 
 class BoolParser(_ValueParser):
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
     __klass__ = Bool
 
     def __check__(self, src):  # type: (Source) -> bool
@@ -245,12 +249,14 @@ class BoolParser(_ValueParser):
             return False
 
     def __parse__(self, style, src):  # type: (bool, Source) -> Tuple(bool)
-        return (parse_word(style, src),)
+        parse_word(unicode(style).lower(), src)
+        # since parse_word returns the word just use the actual style itself (which is bool)
+        return (style,)
 
 
 class StringParser(_ValueParser):
-    __klass__ = String
     __slots__ = ["_multi"]
+    __klass__ = String
 
     def multi():
         def fget(self):
@@ -274,6 +280,8 @@ class StringParser(_ValueParser):
 
 
 class NumDateParser(_ValueParser):
+    __slots__ = ["_datetime", "_date", "_time", "_integer", "_float"]
+
     def datetime():
         def fget(self):
             return self._datetime
@@ -334,7 +342,7 @@ class NumDateParser(_ValueParser):
             src.current in "+-"  # signed
             or src.current == "i"  # inf
             or src.current == "n"  # nan
-            or src.current in string.digits
+            or src.current in chars.digits
         ):
             return True
 
@@ -359,7 +367,7 @@ class NumDateParser(_ValueParser):
         _mark = src.idx
         if src.current in "01":
             src.inc(exception=True)
-            src.consume(string.digits, min=1, max=1)
+            src.consume(chars.digits, min=1, max=1)
         elif src.current in "2":
             src.inc(exception=True)
             src.consume("0123", min=1, max=1)
@@ -374,7 +382,7 @@ class NumDateParser(_ValueParser):
         _mark = src.idx
         if src.current in "012345":
             src.inc(exception=True)
-            src.consume(string.digits, min=1, max=1)
+            src.consume(chars.digits, min=1, max=1)
         else:
             raise src.parse_error(UnexpectedCharError, src.current)
         minute = int(src[_mark : src.idx])
@@ -394,7 +402,7 @@ class NumDateParser(_ValueParser):
         mark = src.idx
         if src.current in "01":
             src.inc(exception=True)
-            src.consume(string.digits, min=1, max=1)
+            src.consume(chars.digits, min=1, max=1)
         elif src.current in "2":
             src.inc(exception=True)
             src.consume("0123", min=1, max=1)
@@ -448,7 +456,7 @@ class NumDateParser(_ValueParser):
             src.consume("123456789", min=1, max=1)
         elif src.current in "12":
             src.inc(exception=True)
-            src.consume(string.digits, min=1, max=1)
+            src.consume(chars.digits, min=1, max=1)
         elif src.current in "3":
             src.inc(exception=True)
             src.consume("01", min=1, max=1)
@@ -479,7 +487,7 @@ class NumDateParser(_ValueParser):
         _mark = src.idx
         if src.current in "012345":
             src.inc(exception=True)
-            src.consume(string.digits, min=1, max=1)
+            src.consume(chars.digits, min=1, max=1)
         else:
             raise src.parse_error(UnexpectedCharError, src.current)
         minute = int(src[_mark : src.idx])
@@ -491,7 +499,7 @@ class NumDateParser(_ValueParser):
         _mark = src.idx
         if src.current in "012345":
             src.inc(exception=True)
-            src.consume(string.digits, min=1, max=1)
+            src.consume(chars.digits, min=1, max=1)
         # Python's datetime/time doesn't handle RFC3339 leap seconds
         # elif src.current in "6":
         #     src.inc(exception=True)
@@ -505,7 +513,7 @@ class NumDateParser(_ValueParser):
         if src.current == ".":
             src.inc(exception=True)
             _mark = src.idx
-            src.consume(string.digits, min=1, max=6)
+            src.consume(chars.digits, min=1, max=6)
             microsecond = int("{:<06s}".format(src[_mark : src.idx]))
 
         return dt.time(hour, minute, second, microsecond)
@@ -520,12 +528,12 @@ class NumDateParser(_ValueParser):
             [{digits}]
         )
         """.format(
-            digits=string.digits
+            digits=chars.digits
         ),
         flags=VERBOSE,
     )
 
-    def _parse_integer(self, sign, mark, src):
+    def _parse_integer(self, sign, mark, src, base):
         # get the raw number
         raw = src[mark : src.idx]
 
@@ -537,9 +545,9 @@ class NumDateParser(_ValueParser):
         # use thousands separator
         ksep = clean != raw
 
-        return int(sign + clean), ksep
+        return int(sign + clean, base), ksep, base
 
-    def _parse_float(self, sign, mark, src):
+    def _parse_float(self, sign, mark, src, scientific):
         # get the raw number
         raw = src[mark : src.idx]
 
@@ -551,16 +559,16 @@ class NumDateParser(_ValueParser):
         # use thousands separator
         ksep = clean != raw
 
-        return float(sign + clean), ksep
+        return float(sign + clean), ksep, scientific
 
-    def _parse_underscore(self, src):
-        src.consume(string.digits, min=1)
+    def _parse_underscore(self, src, digits=chars.digits):
+        src.consume(digits, min=1)
 
         # if the next character is _ we will consume it and expect a digit to follow
         if src.current == "_":
             src.inc(exception=True)
 
-            self._parse_underscore(src)
+            self._parse_underscore(src, digits)
 
     def __parse__(self, _, src):
         sign = self._get_sign(src)
@@ -577,7 +585,7 @@ class NumDateParser(_ValueParser):
         mark = src.idx
 
         # consume as many valid characters as possible
-        src.consume(string.digits, min=1)
+        src.consume(chars.digits, min=1)
 
         # datetime or date
         if (self.datetime or self.date) and not sign and src.current == "-":
@@ -586,9 +594,6 @@ class NumDateParser(_ValueParser):
         # time
         if self.time and not sign and src.current == ":":
             return (self._parse_time(mark, src),)
-
-        # float or integer
-        decimal = euler = False
 
         # _ allowed between digits
         if src.current == "_":
@@ -603,36 +608,66 @@ class NumDateParser(_ValueParser):
         if len(raw) > 1 and raw.startswith("0"):
             raise src.parse_error(LeadingZeroError)
 
-        # decimal
-        if self.float and src.current == ".":
-            decimal = True
-
-            # consume this char, EOF here is problematic (middle of number)
-            src.inc(exception=True)
-
-            # consume as many valid characters as possible (at least one)
-            self._parse_underscore(src)
-
-        # euler
-        if self.float and src.current in "eE":
-            euler = True
-
-            # consume this char, EOF here is problematic (middle of number)
-            src.inc(exception=True)
-
-            # there may (or may not) be a sign here, consume it
-            self._get_sign(src)
-
-            # consume as many valid characters as possible (at least one)
-            self._parse_underscore(src)
-
         # float
-        if self.float and (decimal or euler):
-            return self._parse_float(sign, mark, src)
+        if self.float:
+            decimal = False
+            if src.current == ".":
+                # decimal
+                decimal = True
+
+                # consume this char, EOF here is problematic (middle of number)
+                src.inc(exception=True)
+
+                # consume as many valid characters as possible (at least one)
+                self._parse_underscore(src)
+
+            scientific = False
+            if src.current in "eE":
+                # scientific
+                scientific = True
+
+                # consume this char, EOF here is problematic (middle of number)
+                src.inc(exception=True)
+
+                # there may (or may not) be a sign here, consume it
+                self._get_sign(src)
+
+                # consume as many valid characters as possible (at least one)
+                self._parse_underscore(src)
+
+            if decimal or scientific:
+                return self._parse_float(sign, mark, src, scientific)
 
         # integer
         if self.integer:
-            return self._parse_integer(sign, mark, src)
+            base = 10
+            if raw == "0":
+                if src.current == "x":
+                    base = 16
+
+                    # consume this char, EOF here is problematic (middle of number)
+                    src.inc(exception=True)
+
+                    # consume as many valid characters as possible (at least one)
+                    self._parse_underscore(src, chars.hex)
+                elif src.current == "o":
+                    base = 8
+
+                    # consume this char, EOF here is problematic (middle of number)
+                    src.inc(exception=True)
+
+                    # consume as many valid characters as possible (at least one)
+                    self._parse_underscore(src, chars.oct)
+                elif src.current == "b":
+                    base = 2
+
+                    # consume this char, EOF here is problematic (middle of number)
+                    src.inc(exception=True)
+
+                    # consume as many valid characters as possible (at least one)
+                    self._parse_underscore(src, chars.bin)
+
+            return self._parse_integer(sign, mark, src, base)
 
         raise src.parse_error(UnexpectedCharError, src.current)
 
@@ -651,7 +686,7 @@ class NumDateParser(_ValueParser):
         return self.__assign__(parent, key, value)
 
 
-class _ValueParser(_ContainerParser):
+class _ValuesParser(_ContainerParser):
     __slots__ = ["_values", "_inline_comment", "_comment"]
 
     def values():
@@ -706,7 +741,7 @@ class _ValueParser(_ContainerParser):
         raise src.parse_error(UnexpectedCharError, src.current)
 
 
-class _ItemParser(_ValueParser):
+class _ItemParser(_ValuesParser):
     __slots__ = ["_key"]
 
     def key():
@@ -727,13 +762,13 @@ class _ItemParser(_ValueParser):
         key = self.key.parse(src)
 
         # spacing
-        src.consume(TOMLChar.SPACES)
+        src.consume(chars.spaces)
 
         # value
         value = super(_ItemParser, self).__inst__(src, parent, key)
 
         # spacing
-        src.consume(TOMLChar.SPACES)
+        src.consume(chars.spaces)
 
         # inline comment
         if self.inline_comment:
@@ -746,20 +781,21 @@ class _ItemParser(_ValueParser):
 
 
 class InlineTableParser(_ItemParser):
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
     __klass__ = Table
 
     def __check__(self, src):
         if src.current == "{":
             return True
 
-    def __inst__(self, src, parent, key):
+    def __inst__(self, _, src, parent, key):
         src.inc(exception=True)  # consume opening bracket
 
         tbl = self.__assign__(parent, key, {})
         first = True
         while src.current != "}":
             # leading indent
-            src.consume(TOMLChar.SPACES)
+            src.consume(chars.spaces)
 
             # skip additional parsing if we find a closing bracket
             if src.current == "}":
@@ -769,7 +805,7 @@ class InlineTableParser(_ItemParser):
                 src.consume(",", min=1, max=1)
 
             # spacing
-            src.consume(TOMLChar.SPACES)
+            src.consume(chars.spaces)
 
             # key-value
             super(InlineTableParser, self).__inst__(src, tbl)
@@ -781,8 +817,8 @@ class InlineTableParser(_ItemParser):
 
 
 class TableParser(_ItemParser):
-    __klass__ = Table
     __slots__ = ["_tablekey"]
+    __klass__ = Table
 
     def tablekey():
         def fget(self):
@@ -803,7 +839,7 @@ class TableParser(_ItemParser):
     def _get_table(self, src, tbl):
         while src.current not in "[\0":
             # leading indent
-            src.consume(TOMLChar.WS)
+            src.consume(chars.ws)
 
             # skip additional parsing if we find a closing bracket
             if src.current in "[\0":
@@ -825,7 +861,7 @@ class TableParser(_ItemParser):
 
     def __inst__(self, _, src):
         inst = self.__klass__()
-        inst.complex = True
+        inst.complexity = True
         self._get_table(src, inst)
 
         while src.current != "\0":
@@ -845,14 +881,15 @@ class TableParser(_ItemParser):
                 tbl = inst.setdefault(key, {})
             if comment:
                 tbl.comment = comment
-            tbl.complex = True
+            tbl.complexity = True
 
             self._get_table(src, tbl)
 
         return inst
 
 
-class ArrayParser(_ValueParser):
+class ArrayParser(_ValuesParser):
+    __slots__ = []  # must include __slots__ otherwise we become __dict__
     __klass__ = Array
 
     def __check__(self, src):
@@ -866,7 +903,7 @@ class ArrayParser(_ValueParser):
         previous_is_value = False
         while src.current != "]":
             # leading indent
-            src.consume(TOMLChar.WS)
+            src.consume(chars.ws)
 
             # skip additional parsing if we find a closing bracket
             if src.current == "]":
@@ -888,13 +925,13 @@ class ArrayParser(_ValueParser):
                 value = super(ArrayParser, self).__inst__(src, arr, key)
 
                 # spacing
-                src.consume(TOMLChar.SPACES)
+                src.consume(chars.spaces)
 
                 if src.consume(",", max=1) == 1:
                     previous_is_value = False
 
                     # spacing
-                    src.consume(TOMLChar.SPACES)
+                    src.consume(chars.spaces)
                 else:
                     previous_is_value = True
 

@@ -1,18 +1,12 @@
 # -*- coding: utf-8 -*-
-from six import with_metaclass
-from abc import ABCMeta
 from .._compat import unicode
 
 
-class _Item(with_metaclass(ABCMeta)):
-    """
-    An item within a TOML document.
-    """
-
+class _Item:
     def __flatten__(self):  # type: () -> str
         raise NotImplementedError
 
-    def __repr__(self):  # type: () -> unicode
+    def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, self)
 
     def __pyobj__(self):
@@ -35,7 +29,9 @@ class _Key(_Item):
 
 
 class Comment(_Item, unicode):
-    def __new__(cls, comment):  # type: (unicode) -> Comment
+    pass
+
+    def __new__(cls, comment):  # type: (str) -> Comment
         if isinstance(comment, cls):
             return comment
 
@@ -53,14 +49,14 @@ class Comment(_Item, unicode):
             comment = ""
 
         self = super(Comment, cls).__new__(cls, comment)
-        self.__bool = not is_none
+        self._bool = not is_none
 
         return self
 
-    def __init__(self, comment):  # type: (unicode) -> None
+    def __init__(self, comment):  # type: (str) -> None
         return super(Comment, self).__init__()
 
-    def apply(self, other):  # type: (unicode) -> unicode
+    def apply(self, other):  # type: (str) -> str
         if self:
             return other + "  # " + self
         return other
@@ -71,7 +67,7 @@ class Comment(_Item, unicode):
         return []
 
     def __bool__(self):
-        return self.__bool
+        return self._bool
 
 
 blank = Comment(None)
@@ -95,9 +91,37 @@ class _Trivia(_Item):
 
 class _Value(_Trivia):
     @property
-    def complex(self):
+    def _derived_complexity(self):
         return bool(self.comment)
+
+    @property
+    def _complexity(self):
+        return self._derived_complexity
+
+    @property
+    def complexity(self):
+        return self._complexity
 
 
 class _Container(_Trivia):
-    pass
+    @property
+    def _derived_complexity(self):
+        raise NotImplementedError
+
+    def complexity():
+        def fget(self):
+            raise NotImplementedError
+
+        def fset(self, value):
+            raise NotImplementedError
+
+        def fdel(self):
+            raise NotImplementedError
+
+        return locals()
+
+    complexity = property(**complexity())
+
+    # _handle = ???
+    # _handle_local = ???
+    # _handle_root = ???

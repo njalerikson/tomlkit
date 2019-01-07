@@ -13,7 +13,6 @@ from ._compat import decode
 from .exceptions import UnexpectedEofError
 from .exceptions import UnexpectedCharError
 from .exceptions import ParseError
-from .toml_char import TOMLChar
 
 
 class _State:
@@ -72,7 +71,8 @@ class _StateHandler:
 
 
 class Source(unicode):
-    EOF = TOMLChar("\0")
+    __slots__ = ["_chars", "_idx", "_marker", "_current", "_state"]
+    EOF = "\0"
 
     def __new__(cls, value):
         if isinstance(value, cls):
@@ -82,22 +82,19 @@ class Source(unicode):
     def __init__(self, _):  # type: (unicode) -> None
         super(Source, self).__init__()
 
-        # Collection of TOMLChars
-        self._chars = iter([(i, TOMLChar(c)) for i, c in enumerate(self)])
+        # Collection of Chars
+        self._chars = iter([(i, c) for i, c in enumerate(self)])
 
-        self._idx = 0
-        self._marker = 0
-        self._current = TOMLChar("")
+        # set by self.inc()
+        # self._idx = ???
+        # self._current = ???
+
+        # set by self.mark()
+        # self._marker = ???
 
         self._state = _StateHandler(self)
 
         self.inc()
-
-    def reset(self):
-        # initialize both idx and current
-        self.inc()
-
-        # reset marker
         self.mark()
 
     @property
@@ -109,7 +106,7 @@ class Source(unicode):
         return self._idx
 
     @property
-    def current(self):  # type: () -> TOMLChar
+    def current(self):  # type: () -> Char
         return self._current
 
     @property
@@ -167,6 +164,12 @@ class Source(unicode):
             raise self.parse_error(UnexpectedCharError, self.current)
 
         return count
+
+    def increment(self, iter):
+        for i in iter:
+            yield i, self.current
+
+            self.inc()
 
     def start(self):  # type: () -> bool
         """

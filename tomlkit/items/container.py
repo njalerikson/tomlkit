@@ -1,17 +1,30 @@
 # -*- coding: utf-8 -*-
 from collections.abc import MutableSequence, Sequence, Mapping
 from queue import LifoQueue
+from abc import ABCMeta
 from ..exceptions import MixedArrayTypesError
-from ._utils import flatten
+from ._utils import flatten, pyobj
 from ._items import _Container, Comment, _Value
 from .key import Key, HiddenKey
 
 
 class _Link(object):
-    __slots__ = "key", "value", "__weakref__"
+    # the individual links that remembers the insert order but also keeps track
+    # of the hidden comments
+    __slots__ = ["key", "value", "scope", "__weakref__"]
+
+    def __hash__(self):
+        try:
+            if self.key is not None:
+                return hash(self.key)
+        except AttributeError:
+            pass
+
+        raise TypeError("unhashable type: '{}'".format(self.__class__.__name__))
 
     def __repr__(self):
-        return "<{} {}>".format(self.__class__.__name__, self.key)
+        tmp = self.value if self.key is None else self.key
+        return "<{} {}>".format(self.__class__.__name__, tmp)
 
 
 class _Links(list):
@@ -78,85 +91,6 @@ class _Links(list):
         raise NotImplementedError("Cannot copy links")
 
 
-def check_state(container, f):
-    # bubble up to the root finding all containers that would need to be moved if the
-    # innermost container's complexity changes
-    containers = []
-    while container._parent != container:
-        if isinstance(container, Array):
-            prior = containers[0] if containers else None
-
-            # Tables preceding the prior are prepended
-            # the prior is skipped
-            # Tables after the prior are prepended
-
-            i = 0
-            for c in container:
-                if c is prior:
-                    i = len(containers)
-                else:
-                    containers.insert(i, c)
-                i += 1
-        containers.insert(0, container)
-
-        container = container._parent
-
-    if containers:
-        container = containers[0]
-
-        def _(*args, **kwargs):
-            # store initial inline state
-            inline = container.inline
-
-            # perform function
-            tmp = f(*args, **kwargs)
-
-            # determine whether the inline state changes
-            if container.inline == inline:
-                # no state change
-                pass
-            else:
-                for c in containers:
-                    if container.complex:
-                        # move to root scope
-                        assert c._scopes.qsize() == 1
-
-                        # old scope (where the value is stored)
-                        oscope = c._scopes.get()
-                        # new scope (where the value is moving to)
-                        nscope = c.root
-                        c._scopes.put(nscope)
-                    else:
-                        # move to local scope
-                        assert c._scopes.qsize() == 2
-
-                        # old scope (where the value is stored)
-                        oscope = c._scopes.get()
-                        # new scope (where the value is moving to)
-                        nscope = c._scopes.get()
-                        # nscope was the last scope in queue and hence wasn't removed
-
-                    # virtual scope (where the value appears to be stored)
-                    vscope = c._parent
-
-                    # get/remove link/value from old scope
-                    link = oscope._links.pop(c._prefix)
-                    value = oscope._values_map.pop(link.key)
-
-                    # update scope
-                    vscope._scope_map[link.key[-1]] = nscope
-                    # insert value
-                    nscope._values_map[link.key] = value
-                    # insert link
-                    nscope._links.append(link)
-
-            # return function result(s)
-            return tmp
-
-        return _
-    return f
-
-
 class _ScopeQueue(LifoQueue):
     # custom LIFO queue
     #   - maxsize=2
@@ -174,9 +108,6 @@ class _ScopeQueue(LifoQueue):
 class Comments(list):
     def __init__(self, container):
         self._container = container
-
-    def __check__(self, f):
-        return check_state(self._container, f)
 
     def __getitem__(self, index):
         link = self._container._links[index]
@@ -200,8 +131,7 @@ class Comments(list):
         if link.key is not None:
             raise IndexError("Cannot delete {}".format(index))
 
-        __delitem__ = self.__check__(self._container._links.__delitem__)
-        __delitem__(index)
+        del self._container._links[index]
 
     def __len__(self):
         # number of comments is the number of links - number of keys
@@ -232,22 +162,21 @@ class Comments(list):
         link.key = None
         link.value = Comment(value)
 
-        insert = self.__check__(self._container._links.insert)
-        insert(index, link)
+        self._container._links.insert(index, link)
 
     def append(self, value):
         self.insert(len(self._container._links), value)
 
 
-class _Scalars(_Container):
+class _ScalarsMeta(ABCMeta):
     def scalars():
         def fget(self):
             return self._scalars
 
         def fset(self, scalars):
-            scalars = list(scalars)
-            if any(not isinstance(s, _Value) for s in scalars):
-                raise TypeError("scalars must be a list of _Value")
+            scalars = tuple(scalars)
+            if any(not issubclass(s, _Value) for s in scalars):
+                raise TypeError("scalars must be an iterable of _Value")
             self._scalars = scalars
 
         return locals()
@@ -255,35 +184,57 @@ class _Scalars(_Container):
     scalars = property(**scalars())
 
 
-class Table(_Scalars, dict):
-    __inline_count__ = 3
-
-    def __new__(cls, value=None, parent=None, prefix=()):
+class _Scalars(_Container, metaclass=_ScalarsMeta):
+    def __new__(cls, value=None, parent=None, handle=None):
         if isinstance(value, cls):
-            return value
+            return value, False
 
-        self = super(Table, cls).__new__(cls)
+        self = super(_Scalars, cls).__new__(cls)
+        self._scalars = cls.scalars
 
         if parent is None:
             parent = self
         else:
             assert isinstance(parent, _Container)
         self._parent = parent
-        self._prefix = prefix
+        if handle is None:
+            handle = _Link()
+            handle.key = ()
+            handle.value = None
+            handle.scope = None
+        else:
+            assert isinstance(handle, _Link)
+        self._handle = handle
+
+        self._value_map = {}
 
         self._scopes = _ScopeQueue()
-        self._scope_map = {}
-        self._values_map = {}
         self._links = _Links()
         self._comments = Comments(self)
 
-        if value:
+        return self, True
+
+    def __init__(self, value=None, parent=None, handle=None):
+        pass
+
+
+class Table(_Scalars, dict):
+    # self[key] = link
+    # self._value_map[link] = value
+    # link.key = (*self._handle.key, key)
+    # link.value = self
+    # link.scope = scope
+    # link in scope._links
+
+    __inline_count__ = 3
+
+    def __new__(cls, value=None, parent=None, handle=None):
+        self, new = super(Table, cls).__new__(cls, value, parent, handle)
+
+        if new and value:
             self.update(value)
 
         return self
-
-    def __init__(self, value=None, parent=None, prefix=()):
-        super(Table, self).__init__()
 
     @property
     def root(self):
@@ -301,30 +252,51 @@ class Table(_Scalars, dict):
         return self._comments
 
     @property
-    def inline(self):
+    def _derived_complexity(self):
+        # a table has a derived complexity if:
+        #      there are comments
+        #   or it has more than __inline_count__ values
+        #   or any of the values are complex
+        return bool(
+            self._comments
+            or len(self) > self.__inline_count__
+            or any(v.complexity for v in self.values())
+        )
+
+    @property
+    def _complexity(self):
+        # a table has a base complexity if:
+        #      the _complex value is set
+        #   or if self if root
+        #   or self has a derived complexity
         try:
-            return not self._complex
+            return self._complex
         except AttributeError:
             pass
 
         # if self is the root then we remember that as perpetually complex
         if self.root is self:
             self._complex = True
-            return not self._complex
+            return self._complex
 
-        # a table is considered inline if:
-        #        there are no comments
-        #   and  it has less than __inline_count__ values
-        #   and  none of the values are complex
-        return bool(
-            not self._comments
-            and len(self) <= self.__inline_count__
-            and not any(v.complex for v in self.values())
-        )
+        return self._derived_complexity
 
-    def complex():
+    def complexity():
         def fget(self):
-            return not self.inline
+            # a table is considered complex if:
+            #      self has a base complexity
+            #   or (
+            #           parent is Array
+            #       and any of the other siblings' have a base complexity
+            #   )
+
+            return bool(
+                self._complexity
+                or (
+                    isinstance(self._parent, Array)
+                    and any(v._complexity for v in self._parent if v is not self)
+                )
+            )
 
         def fset(self, value):
             if value is None:
@@ -336,17 +308,43 @@ class Table(_Scalars, dict):
                     "Cannot set complexity to False, complexity state can only be set "
                     "to True OR deleted."
                 )
-            self.__check__(lambda: setattr(self, "_complex", value))()
+            self._complex = value
 
         def fdel(self):
-            self.__check__(lambda: delattr(self, "_complex"))()
+            del self._complex
 
         return locals()
 
-    complex = property(**complex())
+    complexity = property(**complexity())
 
-    def __check__(self, f):
-        return check_state(self, f)
+    @property
+    def implicit(self):
+        try:
+            return not self._explicit
+        except AttributeError:
+            pass
+
+        return True
+
+    def explicit():
+        def fget(self):
+            return not self.implicit
+
+        def fset(self, value):
+            if value is None:
+                return
+
+            value = bool(value)
+            if value is not True:
+                raise ValueError(
+                    "Cannot set explicitness to False, explicit state can only be set "
+                    "to True."
+                )
+            self._explicit = value
+
+        return locals()
+
+    explicit = property(**explicit())
 
     def __getitem__(self, key):
         rkey = ()
@@ -355,8 +353,7 @@ class Table(_Scalars, dict):
         rkey = tuple(rkey)
 
         link = super(Table, self).__getitem__(key)
-        scope = self._scope_map[link.key[-1]]
-        value = scope._values_map[link.key]
+        value = self._value_map[link]
 
         if rkey:
             return value.__getitem__(rkey)
@@ -371,65 +368,46 @@ class Table(_Scalars, dict):
 
     def __setitem__(self, key, value, scope=None):
         if isinstance(key, tuple):
-            if len(key) > 1:
-                key, *rkey = key
+            key, *rkey = key
+            if rkey:
                 rkey = tuple(rkey)
                 container = self.setdefault(key, {})
                 scope = self if scope is None else scope
                 return container.__setitem__(rkey, value, scope)
-            key = key[0]
 
         try:
+            # this key has been set before, no need to insert a new link
             link = super(Table, self).__getitem__(key)
 
-            set_value = self.__check__(self._set_value)
-            set_value(link, value, scope)
+            # update value and check for complexity change
+            self._set_value(link, value)
         except KeyError:
+            # this is a new key, inserting a new link
             link = _Link()
-            link.key = (*self._prefix, Key(key))
-            link.value = None
+            link.key = (*self._handle.key, Key(key))
+            link.value = self
 
-            add_link = self.__check__(self._add_link)
-            add_link(link, value, scope)
+            self._add_link(link, value, scope)
 
+            # set link at key
             super(Table, self).__setitem__(link.key[-1], link)
 
-    def insert(self, index, key, value):
+    def _set_value(self, link, value):
         try:
-            if key in self:
-                raise IndexError("Cannot reinsert a key that is already set")
+            if self._value_map[link] is value:
+                return
         except KeyError:
-            link = _Link()
-            link.key = (*self._prefix, Key(key))
-            link.value = None
+            pass
 
-            add_link = self.__check__(self._add_link)
-            add_link(link, value)
-
-            super(Table, self).__setitem__(link.key[-1], link)
-
-    def _check_scope(self, value, scope):
-        if scope != self.root and value.complex:
-            scope = self.root
-            value._scopes.put(scope)
-
-        return scope
-
-    def _set_value(self, link, value, scope=None):
-        # this is every containers "original" inline scope
-        scope = self if scope is None else scope
-
+        is_container = True
         if isinstance(value, Mapping):
-            value = Table(value=value, parent=self, prefix=link.key)
-            value._scopes.put(scope)
-            scope = self._check_scope(value, scope)
+            value = Table(value=value, parent=self, handle=link)
         elif isinstance(value, Sequence) and not isinstance(value, (str, tuple)):
-            value = Array(value=value, parent=self, prefix=link.key)
-            value._scopes.put(scope)
-            scope = self._check_scope(value, scope)
+            value = Array(value=value, parent=self, handle=link)
         else:
+            is_container = False
             args = value if isinstance(value, tuple) else (value,)
-            for scalar in self.scalars:
+            for scalar in self._scalars:
                 try:
                     value = scalar(*args)
                     break
@@ -439,21 +417,31 @@ class Table(_Scalars, dict):
             if not isinstance(value, _Value):
                 raise TypeError(
                     "Cannot convert {} to valid types ({})".format(
-                        value, ", ".join(scalar.__name__ for scalar in self.scalar)
+                        value, ", ".join(scalar.__name__ for scalar in self._scalars)
                     )
                 )
 
-        scope = self._scope_map.setdefault(link.key[-1], scope)
+        # set value at link
+        self._value_map[link] = value
 
-        scope._values_map[link.key] = value
+        return is_container
 
-        return scope
+    def _add_link(self, link, value, scope):
+        is_container = self._set_value(link, value)
 
-    def _add_link(self, link, value, scope=None):
-        scope = self._set_value(link, value, scope)
+        assert is_container is not None
 
-        # store a link into the scope such that we can properly render the toml
+        # this is every item's "original" inline scope
+        scope = self if scope is None else scope
+        link.scope = scope
+
+        # store a link into scope such that we can render in the correct order
         scope._links.append(link)
+
+        # containers store a second link into the root in case the container needs to be
+        # rendered as a complex structure
+        if is_container and scope is not self.root:
+            self.root._links.append(link)
 
     def update(self, *args, **kwargs):
         if len(args) > 1:
@@ -468,7 +456,7 @@ class Table(_Scalars, dict):
                     if link.key is None:
                         self._comments.append(link.value)
                     else:
-                        self[link.key] = arg[link.key[-1]]
+                        self[link.key] = arg[link.key]
             elif isinstance(arg, Mapping):
                 for key in arg:
                     self[key] = arg[key]
@@ -490,20 +478,24 @@ class Table(_Scalars, dict):
             del self.__getitem__(key[:-1])[key[-1]]
             return
 
-        fullkey = (*self._prefix, key)
-        scope = self._scope_map.pop(key)
-
-        # remove the link
-        del scope._links[fullkey]
-
-        value = super(Table, self).__getitem__(key)
+        # fetch link, delete link
+        link = super(Table, self).__getitem__(key)
         super(Table, self).__delitem__(key)
+
+        # remove the link from scope and root
+        del link.scope._links[link.key]
+        try:
+            del self.root._links[link.key]
+        except KeyError:
+            pass
+
+        # remove value from mapping
+        value = self._value_map.pop(link)
 
         if isinstance(value, Mapping):
             # this is a nested container
             for key in list(value.keys()):
                 del value[key]
-        del scope._values_map[fullkey]
 
     def items(self):
         for k in self:
@@ -530,10 +522,12 @@ class Table(_Scalars, dict):
         return False
 
     def __flatten__(self):
+        is_root = self.root is self
+        prelen = len(self._handle.key)
+        inline = not self.complexity
+
         simp = []
         comp = []
-
-        first = len(self._prefix)
 
         # if this the root and it has a comment then we want to insert its
         # comment at the top
@@ -542,46 +536,63 @@ class Table(_Scalars, dict):
 
         for link in self._links:
             if link.key is None:
+                # this is a hidden link
                 simp.append(flatten(link.value))
             else:
-                value = self._values_map[link.key]
+                # this is a normal key-value link
+
+                # fetch and flatten key
                 key = []
-                for k in link.key[first:]:
+                for k in link.key[prelen:]:
                     key.extend(k.__flatten__())
                 key = ".".join(key)
 
-                if isinstance(value, Table) and (
-                    value.complex
-                    or (isinstance(value._parent, Array) and value._parent.complex)
-                ):
-                    key = "[{}]".format(key)
+                # fetch value
+                value = link.value._value_map[link]
 
-                    # if this table is inside of an Array it's an AoT
-                    if isinstance(value._parent, Array):
-                        key = "[{}]".format(key)
+                # flatten value
+                if value.complexity:
+                    if isinstance(value, Table):
+                        if is_root:
+                            # this is a Table or AoT
 
-                    # comments are applied directly to the key
-                    key = value.comment.apply(key)
+                            # fixup key as Table
+                            key = "[{}]".format(key)
 
-                    # if we already have tables from before, put a newline between
-                    # them and this
-                    if comp:
-                        comp.append("")
+                            # if this table is inside of an Array it's an AoT
+                            if isinstance(value._parent, Array):
+                                key = "[{}]".format(key)
 
-                    # insert the key and the
-                    comp.append(key)
-                    comp.extend(value.__flatten__())
-                elif isinstance(value, Array) and value.complex:
-                    # the complex array itself is not displayed, the individual Tables
-                    # have already been linked into root so they will be displayed there
-                    pass
-                else:
-                    tvalue = value.comment.apply(flatten(value))
-                    simp.append("{} = {}".format(key, tvalue))
+                            # comments are applied directly to the key
+                            key = value.comment.apply(key)
 
-        if self.inline and (not isinstance(self._parent, Array) or self._parent.inline):
+                            # if we already have tables from before, put a newline between
+                            # them and this
+                            if comp:
+                                comp.append("")
+
+                            # insert the key and the flattened value
+                            comp.append(key)
+                            comp.extend(value.__flatten__())
+                        continue
+                    elif isinstance(value, Array):
+                        # the complex array itself is not displayed, the individual Tables
+                        # have already been linked into root so they will be displayed there
+                        continue
+
+                if link.scope is self:
+                    tmp = flatten(value)
+                    if inline:
+                        tmp += ","
+                    tmp = value.comment.apply(tmp)
+                    simp.append("{} = {}".format(key, tmp))
+
+        if inline:
+            if simp:
+                # remove trailing comma when inline
+                simp[-1] = simp[-1][:-1]
             # this is an inline table, join with commas and style with {}
-            return ["{{{}}}".format(", ".join(simp))]
+            return ["{" + " ".join(simp) + "}"]
         if simp and comp:
             # we have both, put a newline between them
             return simp + [""] + comp
@@ -589,41 +600,30 @@ class Table(_Scalars, dict):
         return simp or comp
 
     def __repr__(self):
-        return "{{{}}}".format(
-            ", ".join("{!r}: {!r}".format(k, v) for k, v in self.items())
-        )
+        return "{" + ", ".join("{!r}: {!r}".format(*kv) for kv in self.items()) + "}"
 
     def __pyobj__(self):  # type: () -> dict
         return {key.__pyobj__(): value.__pyobj__() for key, value in self.items()}
 
 
 class Array(_Scalars, list):
+    # self[index] = link
+    # self._value_map[link] = value
+    # link.key = (*self._handle.key, hiddenkey)
+    # link.value = self
+    # link.scope = scope
+    # link in scope._links
+
     __inline_count__ = 3
-    __indent__ = 4
+    __indent__ = " " * 4
 
-    def __new__(cls, value=None, parent=None, prefix=()):
-        if isinstance(value, cls):
-            return value
+    def __new__(cls, value=None, parent=None, handle=None):
+        self, new = super(Array, cls).__new__(cls, value, parent, handle)
 
-        self = super(Array, cls).__new__(cls)
-
-        assert isinstance(parent, _Container)
-        self._parent = parent
-        self._prefix = prefix
-
-        self._scopes = _ScopeQueue()
-        self._scope_map = {}
-        self._values_map = {}
-        self._links = _Links()
-        self._comments = Comments(self)
-
-        if value:
+        if new and value:
             self.extend(value)
 
         return self
-
-    def __init__(self, value=None, parent=None, prefix=()):
-        super(Array, self).__init__()
 
     @property
     def root(self):
@@ -672,25 +672,29 @@ class Array(_Scalars, list):
         return None
 
     @property
-    def inline(self):
-        return not self.complex
+    def _derived_complexity(self):
+        # an array has a derived complexity if:
+        #       its type is Table
+        #   and any of the tables are complex
+        return bool(self.type == Table and any(t.complexity for t in self))
 
-    def complex():
+    @property
+    def _complexity(self):
+        # an array has a base complexity if:
+        #      the _complex value is set
+        #   or self has a derived complexity
+        try:
+            return self._complex
+        except AttributeError:
+            pass
+
+        return self._derived_complexity
+
+    def complexity():
         def fget(self):
-            try:
-                return self._complex
-            except AttributeError:
-                pass
-
-            # if type is Table then we remember that as perpetually complex
-            if self.type == Table:
-                self._complex = True
-                return not self._complex
-
             # an array is considered complex if:
-            #        its type is Table
-            #   and  any of the tables are complex
-            return bool(any(t.complex for t in self))
+            #   self has a base complexity
+            return self._complexity
 
         def fset(self, value):
             if value is None:
@@ -704,17 +708,43 @@ class Array(_Scalars, list):
                 )
             if self.type not in (Table, None):
                 raise ValueError("Cannot change complexity of a inline array.")
-            self.__check__(lambda: setattr(self, "_complex", value))()
+            self._complex = value
 
         def fdel(self):
-            self.__check__(lambda: delattr(self, "_complex"))()
+            del self._complex
 
         return locals()
 
-    complex = property(**complex())
+    complexity = property(**complexity())
 
-    def __check__(self, f):
-        return check_state(self, f)
+    @property
+    def implicit(self):
+        try:
+            return not self._explicit
+        except AttributeError:
+            pass
+
+        return True
+
+    def explicit():
+        def fget(self):
+            return not self.implicit
+
+        def fset(self, value):
+            if value is None:
+                return
+
+            value = bool(value)
+            if value is not True:
+                raise ValueError(
+                    "Cannot set explicitness to False, explicit state can only be set "
+                    "to True."
+                )
+            self._explicit = value
+
+        return locals()
+
+    explicit = property(**explicit())
 
     def __getitem__(self, index):
         if isinstance(index, slice):
@@ -726,70 +756,64 @@ class Array(_Scalars, list):
         rindex = tuple(rindex)
 
         link = super(Array, self).__getitem__(index)
-
-        try:
-            scope = self._scope_map[link.key[-1]]
-            value = scope._values_map[link.key]
-        except KeyError:
-            raise IndexError("list index out of range")
+        value = self._value_map[link]
 
         if rindex:
             return value.__getitem__(rindex)
         return value
 
-    # allow scope to be passed in, juse done use it
+    # allow scope to be passed in, just don't use it
     def __setitem__(self, index, value, scope=None):
         if isinstance(index, tuple):
-            if len(index) > 1:
-                index, *rindex = index
+            index, *rindex = index
+            if rindex:
                 rindex = tuple(rindex)
-
                 container = self[index]
-
                 return container.__setitem__(rindex, value)
-            index = index[0]
 
+        # can only set an index that already exists, no need to insert a new link
         link = super(Array, self).__getitem__(index)
 
-        set_value = self.__check__(self._set_value)
-        set_value(link, value)
+        self._set_value(link, value)
 
     def insert(self, index, value):
         link = _Link()
-        link.key = (*self._prefix, HiddenKey())
-        link.value = None
+        link.key = (*self._handle.key, HiddenKey())
+        link.value = self
 
-        add_link = self.__check__(self._add_link)
-        add_link(link, value)
+        self._add_link(index, link, value)
 
+        # set link at index
         super(Array, self).insert(index, link)
 
     def _check_scope(self, value, scope):
-        if scope != self.root and value.complex:
+        if scope != self.root and (self.complexity or value.complexity):
             scope = self.root
             value._scopes.put(scope)
 
         return scope
 
-    def _set_value(self, link, value, scope=None):
-        # this is every containers "original" inline scope
-        scope = self if scope is None else scope
+    def _set_value(self, link, value):
+        # if the value being set is already the value that was set then let it be
+        try:
+            if self._value_map[link] is value:
+                return
+        except KeyError:
+            pass
 
-        if isinstance(value, Mapping) and (not self.type or self.type == Table):
-            value = Table(value=value, parent=self, prefix=link.key)
-            value._scopes.put(scope)
-            scope = self._check_scope(value, scope)
+        is_container = True
+        if isinstance(value, Mapping) and self.type in (None, Table):
+            value = Table(value=value, parent=self, handle=link)
         elif (
             isinstance(value, Sequence)
             and not isinstance(value, (str, tuple))
-            and (not self.type or self.type == Array)
+            and self.type in (None, Array)
         ):
-            value = Array(value=value, parent=self, prefix=link.key)
-            value._scopes.put(scope)
-            scope = self._check_scope(value, scope)
+            value = Array(value=value, parent=self, handle=link)
         else:
+            is_container = False
             args = value if isinstance(value, tuple) else (value,)
-            for scalar in self.scalars:
+            for scalar in self._scalars:
                 try:
                     value = scalar(*args)
                     break
@@ -799,23 +823,58 @@ class Array(_Scalars, list):
             if self.type and not isinstance(value, self.type):
                 raise MixedArrayTypesError
 
-        scope = self._scope_map.setdefault(link.key[-1], scope)
+        # set value at link
+        self._value_map[link] = value
 
-        scope._values_map[link.key] = value
+        return is_container
 
-        return scope
+    def _add_link(self, index, link, value):
+        is_container = self._set_value(link, value)
 
-    def _add_link(self, link, value, scope=None):
-        scope = self._set_value(link, value, scope)
+        assert is_container is not None
 
-        # store a link into the scope such that we can properly render the toml
-        scope._links.append(link)
+        # this is every containers "original" inline scope
+        scope = self
+        link.scope = scope
+
+        # store a link into scope/root such that we can render in the correct order
+        try:
+            # retrieve the link currently stored at this index, this will allow us to
+            # fetch the link index
+            olink = super(Array, self).__getitem__(index)
+        except IndexError:
+            # unable to fetch an existing location, the provided index is out of bounds
+            if index > 0:
+                # past end of list, append
+                scope._links.append(link)
+                if is_container and scope is not self.root:
+                    self.root._links.append(link)
+                return
+
+            try:
+                olink = super(Array, self).__getitem__(0)
+            except IndexError:
+                # first link, append
+                scope._links.append(link)
+                if is_container and scope is not self.root:
+                    self.root._links.append(link)
+                return
+
+        # get link index of the old link and insert new link at that location
+        index = scope._links.index(olink)
+        scope._links.insert(index, link)
+
+        # insert new link at old link index in the root links
+        if is_container and scope is not self.root:
+            index = self.root._links.index(olink)
+            self.root._links.insert(index, link)
 
     def extend(self, *args):
         if len(args) > 1:
             raise TypeError(
                 "extend expected at most 1 arguments, got {}".format(len(args))
             )
+
         if args:
             arg = args[0]
             if isinstance(arg, Array):
@@ -836,38 +895,100 @@ class Array(_Scalars, list):
     def append(self, value):
         self.insert(len(self), value)
 
+    def __delitem__(self, index):
+        if isinstance(index, tuple):
+            del self.__getitem__(index[:-1])[index[-1]]
+            return
+
+        # fetch link, delete link
+        link = super(Array, self).__getitem__(index)
+        super(Array, self).__delitem__(index)
+
+        # remove the link from scope and root
+        del link.scope._links[link.key]
+        try:
+            del self.root._links[link.key]
+        except KeyError:
+            pass
+
+        # remove value from mapping
+        value = self._value_map.pop(link)
+
+        if isinstance(value, Mapping):
+            # this is a nested container
+            for key in list(value.keys()):
+                del value[key]
+
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
 
+    def __eq__(self, other):
+        if not isinstance(other, Sequence) or isinstance(other, str):
+            return False
+
+        return all(s == o for s, o in zip(self, other))
+
+    def __add__(self, other):
+        return pyobj(self) + other
+
+    def __iadd__(self, other):
+        if not isinstance(other, Sequence) or isinstance(other, str):
+            raise TypeError(
+                "can only concatenate list (not {}) to list".foramt(type(other))
+            )
+
+        self.extend(other)
+        return self
+
+    def pop(self, i=None):
+        if i is None:
+            i = len(self) - 1
+
+        tmp = pyobj(self[i])
+        del self[i]
+        return tmp
+
+    def clear(self):
+        while self:
+            del self[0]
+
     def __flatten__(self):  # type: () -> str
-        txt = []
+        # this Array is complex, we ignore it
+        if self.complexity:
+            return []
 
-        # we use newlines if there are any comments
-        newline = self._comments or any(v.comment for v in self)
+        has_comments = any(v.comment for v in self)
+        inline = not has_comments and len(self) <= self.__inline_count__
 
+        simp = []
         for link in self._links:
             if link.key is None:
-                txt.append(flatten(link.value))
+                # this is a hidden link
+                simp.append(flatten(link.value))
             else:
-                value = self._values_map[link.key]
-                tvalue = value.__flatten__()
-                if newline:
-                    tvalue[-1] = value.comment.apply(tvalue[-1] + ",")
-                else:
-                    tvalue[-1] += ","
-                txt.extend(tvalue)
+                # this is a normal key-value link
 
-        if not newline:
-            if len(txt) <= self.__inline_count__:
-                if txt:
-                    txt[-1] = txt[-1][:-1]
-                return ["[{}]".format(" ".join(txt))]
-            return ["[", *((" " * self.__indent__) + t for t in txt), "]"]
-        return ["[", *((" " * self.__indent__) + t for t in txt), "]"]
+                # fetch value
+                value = link.value._value_map[link]
+
+                # flatten value
+                tmp = value.__flatten__()
+                if tmp:
+                    tmp[-1] += ","
+                    if has_comments:
+                        tmp[-1] = value.comment.apply(tmp[-1])
+                simp.extend(tmp)
+
+        if inline:
+            if simp:
+                # remove trailing comma when inline
+                simp[-1] = simp[-1][:-1]
+            return ["[" + " ".join(simp) + "]"]
+        return ["[", *((self.__indent__ + s) for s in simp), "]"]
 
     def __repr__(self):
-        return "[{}]".format(", ".join(repr(v) for v in self))
+        return "[" + ", ".join(repr(v) for v in self) + "]"
 
     def __pyobj__(self):  # type: () -> datetime
         return [value.__pyobj__() for value in self]

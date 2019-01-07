@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
-from .._compat import PY2, unicode
+from .._compat import PY2, unicode, decode
 from .._utils import escape_string
 from ._items import _Value
 
@@ -66,28 +66,37 @@ class String(_Value, unicode):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        value = unicode(value)
-        value = escape_string(value)
+        # only escape newline chars if this is not a multi line string
+        # value = escape_string(value)
         t = StringType(StringType.BASIC if t is None else t)
 
         self = super(String, cls).__new__(cls, value)
         self._t = t
-        self._multi = multi or ("\n" in self)
+        self._multi = ("\n" in self) if multi is None else bool(multi)
         return self
 
     def __init__(
         self, value, t=None, multi=None
-    ):  # type: (unicode, StringType, bool) -> None
+    ):  # type: (str, StringType, bool) -> None
         super(String, self).__init__()
 
-    def __flatten__(self):  # type: () -> unicode
-        return [str(self)]
-
-    def __str__(self):  # type: () -> unicode
+    def __flatten__(self):  # type: () -> str
         count = 3 if self._multi else 1
-        return "{}{}{}".format(
-            self._t.open * count, super(String, self).__str__(), self._t.close * count
-        )
+
+        # if BASIC and multiline we need to escape non-newline characters
+        # if BASIC and singleline we need to escape all characters
+
+        txt = super(String, self).__str__()
+        if self._t is StringType.BASIC:
+            # escape_string decodes
+            txt = escape_string(txt, nl=not self._multi)
+        else:
+            txt = decode(txt)
+
+        return ["{}{}{}".format(self._t.open * count, txt, self._t.close * count)]
+
+    def __repr__(self):  # type: () -> str
+        return "<{} {}>".format(self.__class__.__name__, self.__flatten__()[0])
 
     def __pyobj__(self):  # type: () -> str
         return super(String, self).__str__()

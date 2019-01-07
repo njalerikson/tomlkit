@@ -1,21 +1,19 @@
 # -*- coding: utf-8 -*-
-from .._compat import unicode
-from .._utils import _escaped
+from .._utils import _escaped, chars
 from ..exceptions import InvalidCharInStringError
-from ..toml_char import TOMLChar
 
 
 def parse_word(word, src):
     # only keep parsing for special float if the characters match the style
     # try consuming rest of chars in style
-    for c in unicode(word).lower():
+    for c in word:
         src.consume(c, min=1, max=1)
 
     return word
 
 
 def parse_escaped(src, multi):
-    if multi and src.current in TOMLChar.WS:
+    if multi and src.current in chars.ws:
         # When the last non-whitespace character on a line is
         # a \, it will be trimmed along with all whitespace
         # (including newlines) up to the next non-whitespace
@@ -24,7 +22,7 @@ def parse_escaped(src, multi):
         #     hello \
         #     world"""
         tmp = ""
-        while src.current in TOMLChar.WS:
+        while src.current in chars.ws:
             tmp += src.current
             # consume the whitespace, EOF here is an issue
             # (middle of string)
@@ -55,7 +53,7 @@ def parse_escaped(src, multi):
         src.inc(exception=True)
 
         mark = src.idx
-        src.consume("0123456789abcdefABCDEF", min=count, max=count)
+        src.consume(chars.hex, min=count, max=count)
         return chr(int(src[mark : src.idx], 16))
 
     raise src.parse_error(InvalidCharInStringError, src.current)

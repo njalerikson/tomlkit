@@ -19,8 +19,8 @@ __all__ = ["flatten", "pyobj", "toml"]
 
 
 # link types together
-Array.scalars = [Bool, String, DateTime, Date, Time, Integer, Float]
-Table.scalars = [Bool, String, DateTime, Date, Time, Integer, Float]
+Array.scalars = (Bool, String, DateTime, Date, Time, Integer, Float)
+Table.scalars = (Bool, String, DateTime, Date, Time, Integer, Float)
 
 
 # convert Python object into TOML object

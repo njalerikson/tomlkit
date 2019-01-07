@@ -3,11 +3,7 @@ import datetime as dt
 from ._items import _Value
 
 
-class NumDate(_Value):
-    pass
-
-
-class DateTime(NumDate, dt.datetime):
+class DateTime(_Value, dt.datetime):
     """
     A datetime literal.
     """
@@ -125,7 +121,7 @@ class DateTime(NumDate, dt.datetime):
         )
 
 
-class Date(NumDate, dt.date):
+class Date(_Value, dt.date):
     """
     A date literal.
     """
@@ -133,7 +129,9 @@ class Date(NumDate, dt.date):
     def __new__(cls, value):  # type: (date) -> Date
         if isinstance(value, cls):
             return value
-        elif not isinstance(value, dt.date):
+        elif isinstance(value, dt.date):
+            pass
+        else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
         return super(Date, cls).__new__(
@@ -172,7 +170,7 @@ class Date(NumDate, dt.date):
         return self.__class__(dt.date(year, month, day))
 
 
-class Time(NumDate, dt.time):
+class Time(_Value, dt.time):
     """
     A time literal.
     """
@@ -180,7 +178,9 @@ class Time(NumDate, dt.time):
     def __new__(cls, value):  # type: (time) -> Time
         if isinstance(value, cls):
             return value
-        elif not isinstance(value, dt.time):
+        elif isinstance(value, dt.time):
+            pass
+        else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
         return super(Time, cls).__new__(
@@ -237,43 +237,120 @@ class Time(NumDate, dt.time):
         )
 
 
-class Integer(NumDate, int):
+_integerfmt = {
+    16: ("0x{:x}", "0x{:x}"),
+    10: ("{:d}", "{:,}"),
+    8: ("0o{:o}", "0o{:o}"),
+    2: ("0b{:b}", "0b{:b}"),
+}
+
+
+class Integer(_Value, int):
     """
     An integer literal.
     """
 
-    def __new__(cls, value, ksep=False):  # type: (int, bool) -> Integer
+    def ksep():
+        def fget(self):
+            return self._ksep
+
+        def fset(self, ksep):
+            self._ksep = bool(ksep)
+
+        return locals()
+
+    ksep = property(**ksep())
+
+    def base():
+        def fget(self):
+            return self._base
+
+        def fset(self, base):
+            if base not in _integerfmt:
+                raise ValueError
+
+            self._base = base
+
+        return locals()
+
+    base = property(**base())
+
+    @property
+    def _fmt(self):
+        return _integerfmt[self.base]
+
+    def __new__(cls, value, ksep=False, base=None):  # type: (int, bool) -> Integer
         if isinstance(value, cls):
             return value
         elif isinstance(value, int):
-            pass
+            _base = base or 10
+            base = None
         elif isinstance(value, str) and "." not in value and "e" not in value:
-            pass
+            _base = base or 10
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        self = super(Integer, cls).__new__(cls, value)
+        if base is None:
+            self = super(Integer, cls).__new__(cls, value)
+        else:
+            self = super(Integer, cls).__new__(cls, value, base=base)
 
         # thousands separator (_)
-        self._ksep = ksep
+        self.ksep = ksep
+        self.base = _base
 
         return self
 
     def __flatten__(self):  # type: () -> str
-        if self._ksep:
-            return ["{:,}".format(self).replace(",", "_")]
-        return [str(self)]
+        return [str(self).replace(",", "_")]
+
+    def __str__(self):
+        return self._fmt[self._ksep].format(self)
+
+    def __repr__(self):  # type: () -> str
+        return "<{} {}>".format(self.__class__.__name__, str(self))
 
     def __pyobj__(self):  # type: () -> datetime
         return int(self)
 
 
-class Float(NumDate, float):
+_floatfmt = {False: ("{:f}", "{:,f}"), True: ("{:e}", "{:,e}")}
+
+
+class Float(_Value, float):
     """
     A float literal.
     """
 
-    def __new__(cls, value, ksep=False):  # type: (float, bool) -> Float
+    def ksep():
+        def fget(self):
+            return self._ksep
+
+        def fset(self, ksep):
+            self._ksep = bool(ksep)
+
+        return locals()
+
+    ksep = property(**ksep())
+
+    def scientific():
+        def fget(self):
+            return self._scientific
+
+        def fset(self, scientific):
+            self._scientific = bool(scientific)
+
+        return locals()
+
+    scientific = property(**scientific())
+
+    @property
+    def _fmt(self):
+        return _floatfmt[self.scientific]
+
+    def __new__(
+        cls, value, ksep=False, scientific=False
+    ):  # type: (float, bool) -> Float
         if isinstance(value, cls):
             return value
         elif isinstance(value, float):
@@ -290,14 +367,19 @@ class Float(NumDate, float):
         self = super(Float, cls).__new__(cls, value)
 
         # thousands separator (_)
-        self._ksep = ksep
+        self.ksep = ksep
+        self.scientific = scientific
 
         return self
 
     def __flatten__(self):  # type: () -> str
-        if self._ksep:
-            return ["{:,}".format(self).replace(",", "_")]
-        return [str(self)]
+        return [str(self).replace(",", "_")]
+
+    def __str__(self):
+        return self._fmt[self._ksep].format(self)
+
+    def __repr__(self):  # type: () -> str
+        return "<{} {}>".format(self.__class__.__name__, str(self))
 
     def __pyobj__(self):  # type: () -> datetime
         return float(self)
