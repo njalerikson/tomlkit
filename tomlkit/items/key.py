@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
+
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string, chars
 from ._items import _Key
@@ -10,31 +11,25 @@ else:
     from functools import lru_cache
 
 
+_open_close = {0: ("",), 1: ('"',), 2: ("'",)}
+
+
 class KeyType(Enum):
     # Bare Key
-    BARE = ("",)
+    BARE = 0
     # Basic Key
-    BASIC = ('"',)
+    BASIC = 1
     # Literal Key
-    LITERAL = ("'",)
-
-    @classmethod
-    def _missing_(cls, value):
-        if value == "":
-            return KeyType.BARE
-        elif value == '"':
-            return KeyType.BASIC
-        elif value == "'":
-            return KeyType.LITERAL
-
-        super(KeyType, cls)._missing_(value)
+    LITERAL = 2
 
     @lru_cache(maxsize=None)
     def __getitem__(self, index):  # type: (int) -> str
-        maximum = len(self.value) - 1
-        minimum = -len(self.value)
+        OC = _open_close[self.value]
+
+        maximum = len(OC) - 1
+        minimum = -len(OC)
         index = min(minimum, max(index, maximum))
-        return self.value[index]
+        return OC[index]
 
     @property
     @lru_cache(maxsize=None)

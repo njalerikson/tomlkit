@@ -10,27 +10,23 @@ else:
     from functools import lru_cache
 
 
+_open_close = {0: ('"',), 1: ("'",)}
+
+
 class StringType(Enum):
     # Basic String
-    BASIC = ('"',)
+    BASIC = 0
     # Literal String
-    LITERAL = ("'",)
-
-    @classmethod
-    def _missing_(cls, value):
-        if value == '"':
-            return StringType.BASIC
-        elif value == "'":
-            return StringType.LITERAL
-
-        super(StringType, cls)._missing_(value)
+    LITERAL = 1
 
     @lru_cache(maxsize=None)
     def __getitem__(self, index):  # type: (int) -> str
-        maximum = len(self.value) - 1
-        minimum = -len(self.value)
+        OC = _open_close[self.value]
+
+        maximum = len(OC) - 1
+        minimum = -len(OC)
         index = min(minimum, max(index, maximum))
-        return self.value[index]
+        return [index]
 
     @property
     @lru_cache(maxsize=None)
