@@ -2,117 +2,90 @@
 from __future__ import unicode_literals
 
 import datetime
+from textwrap import dedent
 
-from tomlkit import aot
-from tomlkit import array
-from tomlkit import comment
-from tomlkit import document
-from tomlkit import item
-from tomlkit import nl
-from tomlkit import parse
-from tomlkit import table
+from tomlkit import toml, flatten, loads
+from tomlkit.items import String
 from tomlkit._utils import _utc
 
 
 def test_build_example(example):
     content = example("example")
 
-    doc = document()
-    doc.add(comment("This is a TOML document. Boom."))
-    doc.add(nl())
-    doc.add("title", "TOML Example")
+    doc = toml()
+    doc.comments.append("This is a TOML document. Boom.")
+    doc["title"] = "TOML Example"
 
-    owner = table()
-    owner.add("name", "Tom Preston-Werner")
-    owner.add("organization", "GitHub")
-    owner.add("bio", "GitHub Cofounder & CEO\nLikes tater tots and beer.")
-    owner.add("dob", datetime.datetime(1979, 5, 27, 7, 32, tzinfo=_utc))
-    owner["dob"].comment("First class dates? Why not?")
+    owner = doc.setdefault("owner", {})
+    owner["name"] = "Tom Preston-Werner"
+    owner["organization"] = "GitHub"
+    owner["bio"] = String(
+        "GitHub Cofounder & CEO\nLikes tater tots and beer.", multi=False
+    )
+    owner["dob"] = datetime.datetime(1979, 5, 27, 7, 32, tzinfo=_utc)
+    owner["dob"].comment = "First class dates? Why not?"
 
-    doc.add("owner", owner)
-
-    database = table()
+    database = doc.setdefault("database", {})
     database["server"] = "192.168.1.1"
     database["ports"] = [8001, 8001, 8002]
     database["connection_max"] = 5000
     database["enabled"] = True
 
-    doc["database"] = database
+    servers = doc.setdefault("servers", {})
+    servers.explicit = True  # force the empty table to display
 
-    servers = table()
-    servers.add(nl())
-    c = comment(
+    alpha = servers.setdefault("alpha", {})
+    alpha.head_comments.append(
         "You can indent as you please. Tabs or spaces. TOML don't care."
-    ).indent(2)
-    c.trivia.trail = ""
-    servers.add(c)
-    alpha = table()
-    servers.append("alpha", alpha)
-    alpha.indent(2)
-    alpha.add("ip", "10.0.0.1")
-    alpha.add("dc", "eqdc10")
-
-    beta = table()
-    servers.append("beta", beta)
-    beta.add("ip", "10.0.0.2")
-    beta.add("dc", "eqdc10")
-    beta.add("country", "中国")
-    beta["country"].comment("This should be parsed as UTF-8")
-    beta.indent(2)
-
-    doc["servers"] = servers
-
-    clients = table()
-    doc.add("clients", clients)
-    clients["data"] = item([["gamma", "delta"], [1, 2]]).comment(
-        "just an update to make sure parsers support it"
     )
+    alpha.complexity = True  # force Table
+    alpha["ip"] = "10.0.0.1"
+    alpha["dc"] = "eqdc10"
 
-    clients.add(nl())
-    clients.add(comment("Line breaks are OK when inside arrays"))
-    clients["hosts"] = array(
-        """[
-  "alpha",
-  "omega"
-]"""
-    )
+    beta = servers.setdefault("beta", {})
+    beta.complexity = True  # force Table
+    beta["ip"] = "10.0.0.2"
+    beta["dc"] = "eqdc10"
+    beta["country"] = "中国"
+    beta["country"].comment = "This should be parsed as UTF-8"
 
-    doc.add(nl())
-    doc.add(comment("Products"))
+    clients = doc.setdefault("clients", {})
+    clients["data"] = [["gamma", "delta"], [1, 2]]
+    clients["data"].comment = "just an update to make sure parsers support it"
+    clients.comments.append("Line breaks are OK when inside arrays")
+    clients["hosts"] = ["alpha", "omega"]
 
-    products = aot()
-    doc["products"] = products
+    product = doc.setdefault("products", [])
+    product.complexity = True  # force AoT
 
-    hammer = table().indent(2)
-    hammer["name"] = "Hammer"
-    hammer["sku"] = 738594937
+    product.append({})
+    product[0].head_comments.append("Products")
+    product[0, "name"] = "Hammer"
+    product[0, "sku"] = 738594937
 
-    nail = table().indent(2)
-    nail["name"] = "Nail"
-    nail["sku"] = 284758393
-    nail["color"] = "gray"
+    product.append({})
+    product[1, "name"] = "Nail"
+    product[1, "sku"] = 284758393
+    product[1, "color"] = "gray"
 
-    products.append(hammer)
-    products.append(nail)
-
-    assert content == doc.as_string()
+    assert flatten(doc) == content
 
 
 def test_add_remove():
     content = ""
 
-    doc = parse(content)
-    doc.append("foo", "bar")
+    doc = loads(content)
+    doc["foo"] = "bar"
 
-    assert (
-        doc.as_string()
-        == """foo = "bar"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = "bar"
+        """
     )
 
-    doc.remove("foo")
+    del doc["foo"]
 
-    assert doc.as_string() == ""
+    assert flatten(doc) == ""
 
 
 def test_append_table_after_multiple_indices():
@@ -126,5 +99,6 @@ def test_append_table_after_multiple_indices():
     [packages.bar]
     version = "*"
     """
-    doc = parse(content)
-    doc.append("foobar", {"name": "John"})
+
+    doc = loads(content)
+    doc["foobar"] = {"name": "John"}

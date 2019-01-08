@@ -3,7 +3,7 @@ from collections.abc import MutableSequence, Sequence, Mapping
 from queue import LifoQueue
 from abc import ABCMeta
 from ..exceptions import MixedArrayTypesError
-from ._utils import flatten, pyobj
+from ._utils import pyobj, flatten
 from ._items import _Container, Comment, _Value
 from .key import Key, HiddenKey
 
@@ -106,11 +106,14 @@ class _ScopeQueue(LifoQueue):
 
 
 class Comments(list):
-    def __init__(self, container):
-        self._container = container
+    def __init__(self, links=None):
+        self._links = _Links() if links is None else links
 
     def __getitem__(self, index):
-        link = self._container._links[index]
+        if isinstance(index, slice):
+            return [self[i] for i in range(index.start, index.stop, index.step)]
+
+        link = self._links[index]
 
         if link.key is not None:
             raise IndexError("Cannot get {}".format(index))
@@ -118,7 +121,7 @@ class Comments(list):
         return link.value
 
     def __setitem__(self, index, value):
-        link = self._container._links[index]
+        link = self._links[index]
 
         if link.key is not None:
             raise IndexError("Cannot set {}".format(index))
@@ -126,22 +129,22 @@ class Comments(list):
         link.value = Comment(value)
 
     def __delitem__(self, index):
-        link = self._container._links[index]
+        link = self._links[index]
 
         if link.key is not None:
             raise IndexError("Cannot delete {}".format(index))
 
-        del self._container._links[index]
+        del self._links[index]
 
     def __len__(self):
         # number of comments is the number of links - number of keys
-        return len(self._container._links) - len(self._container._links._map)
+        return len(self._links) - len(self._links._map)
 
     def __bool__(self):
         return len(self) > 0
 
     def __iter__(self):
-        for link in self._container._links:
+        for link in self._links:
             if link.key is None:
                 yield link.value
 
@@ -152,20 +155,40 @@ class Comments(list):
         return "{{{}}}".format(
             ", ".join(
                 "{}: {!r}".format(i, link.value)
-                for i, link in enumerate(self._container._links)
+                for i, link in enumerate(self._links)
                 if link.key is None
             )
         )
+
+    def pop(self, index=None):
+        if len(self) == 0:
+            raise IndexError("pop from empty list")
+
+        if index is None:
+            index = len(self._links) - 1
+            while index >= 0:
+                link = self._links[index]
+                if link.key is None:
+                    del self._links[index]
+                    return link.value
+                index -= 1
+        else:
+            link = self._links[index]
+            if link.key is None:
+                del self._links[index]
+                return link.value
+
+        raise IndexError("Cannot pop {}".format(index))
 
     def insert(self, index, value):
         link = _Link()
         link.key = None
         link.value = Comment(value)
 
-        self._container._links.insert(index, link)
+        self._links.insert(index, link)
 
     def append(self, value):
-        self.insert(len(self._container._links), value)
+        self.insert(len(self._links), value)
 
 
 class _ScalarsMeta(ABCMeta):
@@ -210,7 +233,7 @@ class _Scalars(_Container, metaclass=_ScalarsMeta):
 
         self._scopes = _ScopeQueue()
         self._links = _Links()
-        self._comments = Comments(self)
+        self._comments = Comments(self._links)
 
         return self, True
 
@@ -231,6 +254,8 @@ class Table(_Scalars, dict):
     def __new__(cls, value=None, parent=None, handle=None):
         self, new = super(Table, cls).__new__(cls, value, parent, handle)
 
+        self._head_comments = Comments()
+
         if new and value:
             self.update(value)
 
@@ -246,6 +271,10 @@ class Table(_Scalars, dict):
                 return self._root
             self._root = self._parent.root
             return self._root
+
+    @property
+    def head_comments(self):  # type: () -> HeadComments
+        return self._head_comments
 
     @property
     def comments(self):  # type: () -> Comments
@@ -294,7 +323,10 @@ class Table(_Scalars, dict):
                 self._complexity
                 or (
                     isinstance(self._parent, Array)
-                    and any(v._complexity for v in self._parent if v is not self)
+                    and (
+                        (hasattr(self._parent, "_complex") and self._parent._complex)
+                        or any(v._complexity for v in self._parent if v is not self)
+                    )
                 )
             )
 
@@ -317,18 +349,19 @@ class Table(_Scalars, dict):
 
     complexity = property(**complexity())
 
-    @property
-    def implicit(self):
-        try:
-            return not self._explicit
-        except AttributeError:
-            pass
-
-        return True
-
     def explicit():
         def fget(self):
-            return not self.implicit
+            try:
+                return self._explicit
+            except AttributeError:
+                pass
+
+            # AoT is always explicit
+            if isinstance(self._parent, Array):
+                self._explicit = True
+                return self._explicit
+
+            return False
 
         def fset(self, value):
             if value is None:
@@ -346,34 +379,40 @@ class Table(_Scalars, dict):
 
     explicit = property(**explicit())
 
-    def __getitem__(self, key):
+    def __getitem__(self, key, infer=False):
         rkey = ()
         if isinstance(key, tuple):
             key, *rkey = key
-        rkey = tuple(rkey)
+            rkey = tuple(rkey)
 
         link = super(Table, self).__getitem__(key)
         value = self._value_map[link]
 
         if rkey:
-            return value.__getitem__(rkey)
+            return value.__getitem__(rkey, infer=infer)
         return value
 
-    def setdefault(self, key, value):
+    def get(self, key, default=None, infer=False):
         try:
-            return self[key]
+            return self.__getitem__(key, infer=infer)
         except KeyError:
-            self[key] = value
-            return self[key]
+            return default
 
-    def __setitem__(self, key, value, scope=None):
+    def setdefault(self, key, value, infer=False):
+        try:
+            return self.__getitem__(key, infer=infer)
+        except KeyError:
+            self.__setitem__(key, value, infer=infer)
+            return self.__getitem__(key, infer=infer)
+
+    def __setitem__(self, key, value, scope=None, infer=False):
         if isinstance(key, tuple):
             key, *rkey = key
             if rkey:
                 rkey = tuple(rkey)
-                container = self.setdefault(key, {})
+                container = self.setdefault(key, {}, infer=infer)
                 scope = self if scope is None else scope
-                return container.__setitem__(rkey, value, scope)
+                return container.__setitem__(rkey, value, scope, infer=infer)
 
         try:
             # this key has been set before, no need to insert a new link
@@ -392,20 +431,21 @@ class Table(_Scalars, dict):
             # set link at key
             super(Table, self).__setitem__(link.key[-1], link)
 
-    def _set_value(self, link, value):
+    def _set_value(self, link, value, insert_link=lambda _: None):
         try:
             if self._value_map[link] is value:
                 return
         except KeyError:
             pass
 
-        is_container = True
         if isinstance(value, Mapping):
+            insert_link(True)
             value = Table(value=value, parent=self, handle=link)
         elif isinstance(value, Sequence) and not isinstance(value, (str, tuple)):
+            insert_link(True)
             value = Array(value=value, parent=self, handle=link)
         else:
-            is_container = False
+            insert_link(False)
             args = value if isinstance(value, tuple) else (value,)
             for scalar in self._scalars:
                 try:
@@ -424,24 +464,23 @@ class Table(_Scalars, dict):
         # set value at link
         self._value_map[link] = value
 
-        return is_container
-
     def _add_link(self, link, value, scope):
-        is_container = self._set_value(link, value)
+        def insert_link(is_container):
+            nonlocal scope
 
-        assert is_container is not None
+            # this is every item's "original" inline scope
+            scope = self if scope is None else scope
+            link.scope = scope
 
-        # this is every item's "original" inline scope
-        scope = self if scope is None else scope
-        link.scope = scope
+            # store a link into scope such that we can render in the correct order
+            scope._links.append(link)
 
-        # store a link into scope such that we can render in the correct order
-        scope._links.append(link)
+            # containers store a second link into the root in case the container needs to be
+            # rendered as a complex structure
+            if is_container and scope is not self.root:
+                self.root._links.append(link)
 
-        # containers store a second link into the root in case the container needs to be
-        # rendered as a complex structure
-        if is_container and scope is not self.root:
-            self.root._links.append(link)
+        self._set_value(link, value, insert_link)
 
     def update(self, *args, **kwargs):
         if len(args) > 1:
@@ -513,13 +552,22 @@ class Table(_Scalars, dict):
         rkey = ()
         if isinstance(key, tuple):
             key, *rkey = key
-        rkey = tuple(rkey)
+            rkey = tuple(rkey)
 
         if super(Table, self).__contains__(key):
             if rkey:
                 return rkey in self[key]
             return True
         return False
+
+    def __eq__(self, other):
+        if not isinstance(other, Mapping):
+            return False
+
+        if len(other) != len(self):
+            return False
+
+        return all(self[k] == other[k] for k in self)
 
     def __flatten__(self):
         is_root = self.root is self
@@ -531,8 +579,10 @@ class Table(_Scalars, dict):
 
         # if this the root and it has a comment then we want to insert its
         # comment at the top
-        if self.root == self and self.comment:
-            simp.append(flatten(self.comment))
+        if is_root:
+            simp.extend(map(flatten, self.head_comments))
+            if self.comment:
+                simp.append(flatten(self.comment))
 
         for link in self._links:
             if link.key is None:
@@ -566,14 +616,12 @@ class Table(_Scalars, dict):
                             # comments are applied directly to the key
                             key = value.comment.apply(key)
 
-                            # if we already have tables from before, put a newline between
-                            # them and this
-                            if comp:
-                                comp.append("")
-
                             # insert the key and the flattened value
-                            comp.append(key)
-                            comp.extend(value.__flatten__())
+                            tmp = value.__flatten__()
+                            if value.explicit or tmp:
+                                comp.extend(map(flatten, value.head_comments))
+                                comp.append(key)
+                                comp.extend(tmp or [""])
                         continue
                     elif isinstance(value, Array):
                         # the complex array itself is not displayed, the individual Tables
@@ -582,22 +630,27 @@ class Table(_Scalars, dict):
 
                 if link.scope is self:
                     tmp = flatten(value)
-                    if inline:
-                        tmp += ","
-                    tmp = value.comment.apply(tmp)
-                    simp.append("{} = {}".format(key, tmp))
+                    if tmp:
+                        if inline:
+                            tmp += ","
+                        tmp = value.comment.apply(tmp)
+                        simp.append("{} = {}".format(key, tmp))
 
         if inline:
             if simp:
                 # remove trailing comma when inline
                 simp[-1] = simp[-1][:-1]
-            # this is an inline table, join with commas and style with {}
-            return ["{" + " ".join(simp) + "}"]
+            if self.explicit or simp:
+                # this is an inline table, join with commas and style with {}
+                return ["{" + " ".join(simp) + "}"]
+            return []
         if simp and comp:
             # we have both, put a newline between them
             return simp + [""] + comp
         # return the one that has stuff
-        return simp or comp
+        if simp:
+            return simp + [""]
+        return comp
 
     def __repr__(self):
         return "{" + ", ".join("{!r}: {!r}".format(*kv) for kv in self.items()) + "}"
@@ -717,59 +770,40 @@ class Array(_Scalars, list):
 
     complexity = property(**complexity())
 
-    @property
-    def implicit(self):
-        try:
-            return not self._explicit
-        except AttributeError:
-            pass
-
-        return True
-
-    def explicit():
-        def fget(self):
-            return not self.implicit
-
-        def fset(self, value):
-            if value is None:
-                return
-
-            value = bool(value)
-            if value is not True:
-                raise ValueError(
-                    "Cannot set explicitness to False, explicit state can only be set "
-                    "to True."
-                )
-            self._explicit = value
-
-        return locals()
-
-    explicit = property(**explicit())
-
-    def __getitem__(self, index):
+    def __getitem__(self, index, infer=False):
         if isinstance(index, slice):
             return [self[i] for i in range(index.start, index.stop, index.step)]
 
         rindex = ()
         if isinstance(index, tuple):
             index, *rindex = index
-        rindex = tuple(rindex)
+            rindex = tuple(rindex)
+
+        if infer and not isinstance(index, int):
+            rindex = (index, *rindex)
+            index = -1
 
         link = super(Array, self).__getitem__(index)
         value = self._value_map[link]
 
         if rindex:
-            return value.__getitem__(rindex)
+            return value.__getitem__(rindex, infer=infer)
         return value
 
     # allow scope to be passed in, just don't use it
-    def __setitem__(self, index, value, scope=None):
+    def __setitem__(self, index, value, scope=None, infer=False):
         if isinstance(index, tuple):
             index, *rindex = index
             if rindex:
                 rindex = tuple(rindex)
-                container = self[index]
-                return container.__setitem__(rindex, value)
+                container = self.__getitem__(index, infer=infer)
+                return container.__setitem__(rindex, value, infer=infer)
+
+        if infer and not isinstance(index, int):
+            rindex = (index, *rindex)
+            index = -1
+            container = self.__getitem__(index, infer=infer)
+            return container.__setitem__(rindex, value, infer=infer)
 
         # can only set an index that already exists, no need to insert a new link
         link = super(Array, self).__getitem__(index)
@@ -793,7 +827,7 @@ class Array(_Scalars, list):
 
         return scope
 
-    def _set_value(self, link, value):
+    def _set_value(self, link, value, insert_link=lambda _: None):
         # if the value being set is already the value that was set then let it be
         try:
             if self._value_map[link] is value:
@@ -801,17 +835,18 @@ class Array(_Scalars, list):
         except KeyError:
             pass
 
-        is_container = True
         if isinstance(value, Mapping) and self.type in (None, Table):
+            insert_link(True)
             value = Table(value=value, parent=self, handle=link)
         elif (
             isinstance(value, Sequence)
             and not isinstance(value, (str, tuple))
             and self.type in (None, Array)
         ):
+            insert_link(True)
             value = Array(value=value, parent=self, handle=link)
         else:
-            is_container = False
+            insert_link(False)
             args = value if isinstance(value, tuple) else (value,)
             for scalar in self._scalars:
                 try:
@@ -826,48 +861,47 @@ class Array(_Scalars, list):
         # set value at link
         self._value_map[link] = value
 
-        return is_container
-
     def _add_link(self, index, link, value):
-        is_container = self._set_value(link, value)
+        def insert_link(is_container):
+            nonlocal index
 
-        assert is_container is not None
+            # this is every containers "original" inline scope
+            scope = self
+            link.scope = scope
 
-        # this is every containers "original" inline scope
-        scope = self
-        link.scope = scope
-
-        # store a link into scope/root such that we can render in the correct order
-        try:
-            # retrieve the link currently stored at this index, this will allow us to
-            # fetch the link index
-            olink = super(Array, self).__getitem__(index)
-        except IndexError:
-            # unable to fetch an existing location, the provided index is out of bounds
-            if index > 0:
-                # past end of list, append
-                scope._links.append(link)
-                if is_container and scope is not self.root:
-                    self.root._links.append(link)
-                return
-
+            # store a link into scope/root such that we can render in the correct order
             try:
-                olink = super(Array, self).__getitem__(0)
+                # retrieve the link currently stored at this index, this will allow us to
+                # fetch the link index
+                olink = super(Array, self).__getitem__(index)
             except IndexError:
-                # first link, append
-                scope._links.append(link)
-                if is_container and scope is not self.root:
-                    self.root._links.append(link)
-                return
+                # unable to fetch an existing location, the provided index is out of bounds
+                if index > 0:
+                    # past end of list, append
+                    scope._links.append(link)
+                    if is_container and scope is not self.root:
+                        self.root._links.append(link)
+                    return
 
-        # get link index of the old link and insert new link at that location
-        index = scope._links.index(olink)
-        scope._links.insert(index, link)
+                try:
+                    olink = super(Array, self).__getitem__(0)
+                except IndexError:
+                    # first link, append
+                    scope._links.append(link)
+                    if is_container and scope is not self.root:
+                        self.root._links.append(link)
+                    return
 
-        # insert new link at old link index in the root links
-        if is_container and scope is not self.root:
-            index = self.root._links.index(olink)
-            self.root._links.insert(index, link)
+            # get link index of the old link and insert new link at that location
+            index = scope._links.index(olink)
+            scope._links.insert(index, link)
+
+            # insert new link at old link index in the root links
+            if is_container and scope is not self.root:
+                index = self.root._links.index(olink)
+                self.root._links.insert(index, link)
+
+        self._set_value(link, value, insert_link)
 
     def extend(self, *args):
         if len(args) > 1:
@@ -925,6 +959,9 @@ class Array(_Scalars, list):
 
     def __eq__(self, other):
         if not isinstance(other, Sequence) or isinstance(other, str):
+            return False
+
+        if len(other) != len(self):
             return False
 
         return all(s == o for s, o in zip(self, other))

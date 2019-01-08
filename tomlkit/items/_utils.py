@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
 
-# flatten TOML object into a string
+# converts TOML object (use as is) into TOML document (str)
 def flatten(data):
     return "\n".join(data.__flatten__())
 
 
-# convert TOML object into Python object
+# converts TOML object into Python object
 def pyobj(data):
     return data.__pyobj__()

@@ -12,7 +12,7 @@ from ._compat import unicode
 from ._compat import decode
 from .exceptions import UnexpectedEofError
 from .exceptions import UnexpectedCharError
-from .exceptions import ParseError
+from .exceptions import ParseErrorMixin
 
 
 class _State:
@@ -161,7 +161,7 @@ class Source(unicode):
 
         # failed to consume minimum number of characters
         if min > 0:
-            raise self.parse_error(UnexpectedCharError, self.current)
+            raise self.parse_error(UnexpectedCharError(self.current))
 
         return count
 
@@ -189,15 +189,27 @@ class Source(unicode):
         """
         self._marker = self._idx
 
-    def parse_error(
-        self, exception=ParseError, *args
-    ):  # type: (ParseError.__class__, ...) -> ParseError
+    def parse_error(self, exception=UnexpectedCharError, *args):
         """
         Creates a generic "parse error" at the current position.
         """
         line, col = self._to_linecol()
 
-        return exception(line, col, *args)
+        # de-construct exception
+        if not isinstance(exception, Exception):
+            exception = exception(*args)
+        args = exception.args
+        exception = exception.__class__
+
+        # generate new exception
+        class _(ParseErrorMixin, exception):
+            pass
+
+        _.__name__ = exception.__name__
+        _.__module__ = exception.__module__
+        _.__doc__ = exception.__doc__
+
+        return _(line, col, *args)
 
     def _to_linecol(self):  # type: () -> Tuple[int, int]
         cur = 0

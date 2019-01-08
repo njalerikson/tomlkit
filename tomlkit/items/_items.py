@@ -29,8 +29,6 @@ class _Key(_Item):
 
 
 class Comment(_Item, unicode):
-    pass
-
     def __new__(cls, comment):  # type: (str) -> Comment
         if isinstance(comment, cls):
             return comment

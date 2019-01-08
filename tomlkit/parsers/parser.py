@@ -4,7 +4,12 @@ import datetime as dt
 from re import compile as r, VERBOSE
 
 from ..source import Source
-from ..exceptions import UnexpectedCharError, LeadingZeroError
+from ..exceptions import (
+    UnexpectedCharError,
+    LeadingZeroError,
+    MixedArrayTypesError,
+    DuplicateKeyError,
+)
 from .._compat import timezone
 from .._compat import unicode
 from .._utils import _utc, chars
@@ -20,8 +25,8 @@ from ._utils import parse_word, parse_string
 
 
 def consume_nl(src):
-    if src.consume(chars.nl) == 0 and not src.end():
-        raise src.parse_error(UnexpectedCharError, src.current)
+    if src.consume(chars.nl, max=1) == 0 and not src.end():
+        raise src.parse_error(UnexpectedCharError(src.current))
 
 
 class _Parser:
@@ -37,14 +42,14 @@ class _Parser:
             # if we didn't consume the entire source then we consider this to be
             # an error
             if not src.end():
-                raise src.parse_error(UnexpectedCharError, src.current)
+                raise src.parse_error(UnexpectedCharError(src.current))
 
             return value
 
         # check that the first character is valid
         check = self.__check__(src)
         if check is None:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
 
         # attempt parsing the remaining value
         with src.state:
@@ -62,9 +67,7 @@ class _Parser:
     def __assign__(self, parent, key, value):
         if isinstance(parent, Mapping):
             if key in parent:
-                raise KeyError(
-                    "Cannot set the same key ({}) multiple times.".format(key)
-                )
+                raise DuplicateKeyError(key)
 
             return parent.setdefault(key, value)
         else:
@@ -75,9 +78,16 @@ class _Parser:
 class _ValueParser(_Parser):
     __slots__ = []  # must include __slots__ otherwise we become __dict__
 
-    def __inst__(self, check, src, parent, key, **kwargs):
+    def __inst__(self, check, src, parent=None, key=None, **kwargs):
         value = self.__klass__(*self.__parse__(check, src, **kwargs))
-        return self.__assign__(parent, key, value)
+
+        if parent is None or key is None:
+            return value
+
+        try:
+            return self.__assign__(parent, key, value)
+        except DuplicateKeyError as e:
+            raise src.parse_error(e)
 
 
 class _ContainerParser(_Parser):
@@ -143,6 +153,9 @@ class _KeysParser(_Parser):
             # key
             keys.append(self.key.parse(src))
             first = False
+
+        if not keys:
+            raise src.parse_error(UnexpectedCharError(src.current))
 
         return tuple(keys)
 
@@ -372,7 +385,7 @@ class NumDateParser(_ValueParser):
             src.inc(exception=True)
             src.consume("0123", min=1, max=1)
         else:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
         hour = int(src[_mark : src.idx])
 
         # delimiter [:]
@@ -384,7 +397,7 @@ class NumDateParser(_ValueParser):
             src.inc(exception=True)
             src.consume(chars.digits, min=1, max=1)
         else:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
         minute = int(src[_mark : src.idx])
 
         seconds = hour * 3600 + minute * 60
@@ -407,7 +420,7 @@ class NumDateParser(_ValueParser):
             src.inc(exception=True)
             src.consume("0123", min=1, max=1)
         else:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
 
         value = self._parse_time(mark, src)
         hour = value.hour
@@ -443,7 +456,7 @@ class NumDateParser(_ValueParser):
             src.inc(exception=True)
             src.consume("012", min=1, max=1)
         else:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
         month = int(src[_mark : src.idx])
 
         # delimiter [-]
@@ -461,7 +474,7 @@ class NumDateParser(_ValueParser):
             src.inc(exception=True)
             src.consume("01", min=1, max=1)
         else:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
         day = int(src[_mark : src.idx])
 
         if self.datetime and src.current in "T ":
@@ -471,14 +484,14 @@ class NumDateParser(_ValueParser):
         if self.date:
             return dt.date(year, month, day)
 
-        raise src.parse_error(UnexpectedCharError, src.current)
+        raise src.parse_error(UnexpectedCharError(src.current))
 
     def _parse_time(self, mark, src):
         # hour - parsed prior to getting here, extract
         raw = src[mark : src.idx]
         hour = int(raw)
         if len(raw) != 2 or hour > 23:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
 
         # delimiter [:]
         src.consume(":", min=1, max=1)
@@ -489,7 +502,7 @@ class NumDateParser(_ValueParser):
             src.inc(exception=True)
             src.consume(chars.digits, min=1, max=1)
         else:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
         minute = int(src[_mark : src.idx])
 
         # delimiter [:]
@@ -505,7 +518,7 @@ class NumDateParser(_ValueParser):
         #     src.inc(exception=True)
         #     src.consume("0", min=1, max=1)
         else:
-            raise src.parse_error(UnexpectedCharError, src.current)
+            raise src.parse_error(UnexpectedCharError(src.current))
         second = int(src[_mark : src.idx])
 
         # microsecond
@@ -669,9 +682,9 @@ class NumDateParser(_ValueParser):
 
             return self._parse_integer(sign, mark, src, base)
 
-        raise src.parse_error(UnexpectedCharError, src.current)
+        raise src.parse_error(UnexpectedCharError(src.current))
 
-    def __inst__(self, check, src, parent, key, **kwargs):
+    def __inst__(self, check, src, parent=None, key=None, **kwargs):
         value, *args = self.__parse__(check, src, **kwargs)
         if isinstance(value, dt.datetime):
             value = DateTime(value, *args)
@@ -683,7 +696,14 @@ class NumDateParser(_ValueParser):
             value = Integer(value, *args)
         else:
             value = Float(value, *args)
-        return self.__assign__(parent, key, value)
+
+        if parent is None or key is None:
+            return value
+
+        try:
+            return self.__assign__(parent, key, value)
+        except DuplicateKeyError as e:
+            raise src.parse_error(e)
 
 
 class _ValuesParser(_ContainerParser):
@@ -729,7 +749,7 @@ class _ValuesParser(_ContainerParser):
 
     comment = property(**comment())
 
-    def __inst__(self, src, parent, key):
+    def __inst__(self, src, parent=None, key=None):
         for parser in self.values:
             check = parser.__check__(src)
             if check is None:
@@ -738,7 +758,7 @@ class _ValuesParser(_ContainerParser):
             with src.state:
                 return parser.__inst__(check, src, parent, key)
 
-        raise src.parse_error(UnexpectedCharError, src.current)
+        raise src.parse_error(UnexpectedCharError(src.current))
 
 
 class _ItemParser(_ValuesParser):
@@ -757,7 +777,7 @@ class _ItemParser(_ValuesParser):
 
     key = property(**key())
 
-    def __inst__(self, src, parent):
+    def __inst__(self, src, parent=None):
         # key
         key = self.key.parse(src)
 
@@ -788,12 +808,16 @@ class InlineTableParser(_ItemParser):
         if src.current == "{":
             return True
 
-    def __inst__(self, _, src, parent, key):
+    def __inst__(self, _, src, parent=None, key=None):
         src.inc(exception=True)  # consume opening bracket
 
-        tbl = self.__assign__(parent, key, {})
+        if parent is None or key is None:
+            tbl = Table()
+        else:
+            tbl = self.__assign__(parent, key, {})
+        tbl.explicit = True
         first = True
-        while src.current != "}":
+        while True:
             # leading indent
             src.consume(chars.spaces)
 
@@ -837,17 +861,24 @@ class TableParser(_ItemParser):
         return True
 
     def _get_table(self, src, tbl):
-        while src.current not in "[\0":
+        comment = 0
+        while True:
             # leading indent
+            mark = src._idx
             src.consume(chars.ws)
+            raw = src[mark : src._idx]
+            if "\n" in raw:
+                # got newlines
+                comment = 0
 
             # skip additional parsing if we find a closing bracket
             if src.current in "[\0":
-                break
+                return comment
 
             if self.comment:
                 try:
                     tbl.comments.append(self.comment.parse(src))
+                    comment += 1
                     continue
                 except UnexpectedCharError:
                     pass
@@ -859,10 +890,14 @@ class TableParser(_ItemParser):
             if not value.comment:
                 consume_nl(src)
 
+            comment = 0
+
     def __inst__(self, _, src):
         inst = self.__klass__()
         inst.complexity = True
-        self._get_table(src, inst)
+
+        prev = inst
+        prev_comment = self._get_table(src, inst)
 
         while src.current != "\0":
             # get key
@@ -874,16 +909,31 @@ class TableParser(_ItemParser):
             # inserted into the array (and if the array doesn't exist yet it needs to
             # be created)
             if aot:
-                arr = inst.setdefault(key, [])
-                arr.append({})
+                arr = inst.setdefault(key, [], infer=True)
+                try:
+                    arr.append({})
+                except AttributeError:
+                    # arr isn't an array
+                    raise src.parse_error()
                 tbl = arr[-1]
             else:
-                tbl = inst.setdefault(key, {})
-            if comment:
-                tbl.comment = comment
-            tbl.complexity = True
+                tbl = inst.setdefault(key, {}, infer=True)
+            try:
+                if comment:
+                    tbl.comment = comment
+                for _ in range(prev_comment):
+                    tbl.head_comments.insert(0, prev.comments.pop())
+                tbl.complexity = True
+                if hasattr(tbl, "_explicit"):
+                    # this exact table key was provided earlier
+                    raise src.parse_error(DuplicateKeyError(key))
+                tbl.explicit = True
+            except AttributeError:
+                # tbl isn't a table
+                raise src.parse_error()
 
-            self._get_table(src, tbl)
+            prev = tbl
+            prev_comment = self._get_table(src, tbl)
 
         return inst
 
@@ -896,10 +946,13 @@ class ArrayParser(_ValuesParser):
         if src.current == "[":
             return True
 
-    def __inst__(self, _, src, parent, key):
+    def __inst__(self, _, src, parent=None, key=None):
         src.inc(exception=True)  # consume opening bracket
 
-        arr = self.__assign__(parent, key, [])
+        if parent is None or key is None:
+            arr = Array()
+        else:
+            arr = self.__assign__(parent, key, [])
         previous_is_value = False
         while src.current != "]":
             # leading indent
@@ -922,7 +975,10 @@ class ArrayParser(_ValuesParser):
                 previous_is_value = False
             else:
                 # value
-                value = super(ArrayParser, self).__inst__(src, arr, key)
+                try:
+                    value = super(ArrayParser, self).__inst__(src, arr, key)
+                except MixedArrayTypesError as e:
+                    raise src.parse_error(e)
 
                 # spacing
                 src.consume(chars.spaces)

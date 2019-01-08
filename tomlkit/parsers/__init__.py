@@ -6,7 +6,7 @@ from .parser import BoolParser, StringParser, NumDateParser
 from .parser import ArrayParser, InlineTableParser, TableParser
 
 
-__all__ = ["loads"]
+__all__ = ["loads", "parse"]
 
 
 # link parsers together
@@ -48,10 +48,13 @@ inlinetable.values = [boolean, string, numdate, array, inlinetable]
 table.values = [boolean, string, numdate, array, inlinetable]
 
 
-# parse string as TOML object
+# converts TOML document (str) into TOML object
 def loads(src, *, base=None):
     base = table if base is None else base
     if not isinstance(base, _Parser):
         raise TypeError("base must be a _Parser")
 
     return base.parse(src)
+
+
+parse = loads

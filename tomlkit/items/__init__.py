@@ -12,10 +12,10 @@ from .numdate import DateTime, Date, Time, Integer, Float
 
 from .container import Array, Table
 
-from ._utils import flatten, pyobj
+from ._utils import pyobj, flatten
 
 
-__all__ = ["flatten", "pyobj", "toml"]
+__all__ = ["toml", "pyobj", "flatten", "dumps", "parse"]
 
 
 # link types together
@@ -23,10 +23,19 @@ Array.scalars = (Bool, String, DateTime, Date, Time, Integer, Float)
 Table.scalars = (Bool, String, DateTime, Date, Time, Integer, Float)
 
 
-# convert Python object into TOML object
-def toml(data, *, base=None):
+# converts Python object into TOML object
+def toml(data=None, *, base=None):
     base = Table if base is None else base
     if not issubclass(base, _Item):
         raise TypeError("base must be an _Item")
 
-    return base(data)
+    return base({} if data is None else data)
+
+
+# converts TOML object (using a base node) into TOML document (str)
+def dumps(obj, *, base=None):
+    # ensure data is valid according to base
+    data = toml(obj, base=base)
+
+    # flatten data into string
+    return flatten(data)

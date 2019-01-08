@@ -1,12 +1,4 @@
-from typing import Optional
-
-
-class TOMLKitError(Exception):
-
-    pass
-
-
-class ParseError(ValueError, TOMLKitError):
+class ParseErrorMixin:
     """
     This error occurs when the parser encounters a syntax error
     in the TOML being parsed. The error references the line and
@@ -16,200 +8,121 @@ class ParseError(ValueError, TOMLKitError):
     def __init__(
         self, line, col, message=None
     ):  # type: (int, int, Optional[str]) -> None
-        self._line = line
-        self._col = col
-
         if message is None:
-            message = "TOML parse error"
+            message = "parse error"
 
-        super(ParseError, self).__init__(
-            "{} at line {} col {}".format(message, self._line, self._col)
-        )
+        message = "{} at line {} col {}".format(message, line, col)
 
-    @property
-    def line(self):
-        return self._line
-
-    @property
-    def col(self):
-        return self._col
+        if isinstance(self, _ParseError):
+            return super(ParseErrorMixin, self).__init__(message=message)
+        super(ParseErrorMixin, self).__init__(message)
 
 
-class MixedArrayTypesError(ParseError):
+class _ParseError(ValueError):
+    def __init__(self, message):
+        super(_ParseError, self).__init__(message)
+
+
+class MixedArrayTypesError(_ParseError):
     """
     An array was found that had two or more element types.
     """
 
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Mixed types found in array"
+    def __init__(self, message=None):  # type: (str) -> None
+        if message is None:
+            message = "mixed types found in array"
 
-        super(MixedArrayTypesError, self).__init__(line, col, message=message)
-
-
-class InvalidNumberError(ParseError):
-    """
-    A numeric field was improperly specified.
-    """
-
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Invalid number"
-
-        super(InvalidNumberError, self).__init__(line, col, message=message)
+        super(MixedArrayTypesError, self).__init__(message)
 
 
-class InvalidDateTimeError(ParseError):
-    """
-    A datetime field was improperly specified.
-    """
-
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Invalid datetime"
-
-        super(InvalidDateTimeError, self).__init__(line, col, message=message)
-
-
-class InvalidDateError(ParseError):
-    """
-    A date field was improperly specified.
-    """
-
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Invalid date"
-
-        super(InvalidDateError, self).__init__(line, col, message=message)
-
-
-class InvalidTimeError(ParseError):
-    """
-    A date field was improperly specified.
-    """
-
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Invalid time"
-
-        super(InvalidTimeError, self).__init__(line, col, message=message)
-
-
-class InvalidNumberOrDateError(ParseError):
-    """
-    A numeric or date field was improperly specified.
-    """
-
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Invalid number or date format"
-
-        super(InvalidNumberOrDateError, self).__init__(line, col, message=message)
-
-
-class TrailingCommaError(ParseError):
-    """
-    An InlineTable cannot have a trailing comma.
-    """
-
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Cannot have trailing comma"
-
-        super(TrailingCommaError, self).__init__(line, col, message=message)
-
-
-class LeadingZeroError(ParseError):
+class LeadingZeroError(_ParseError):
     """
     A numeric has invalid leading zeros.
     """
 
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Cannot have leading zeros"
+    def __init__(self, message=None):  # type: (str) -> None
+        if message is None:
+            message = "cannot have leading zeros"
 
-        super(LeadingZeroError, self).__init__(line, col, message=message)
+        super(LeadingZeroError, self).__init__(message)
 
 
-class UnexpectedCharError(ParseError):
+class DuplicateKeyError(_ParseError):
+    """
+    A key has occurred more than once.
+    """
+
+    def __init__(self, key=None, message=None):  # type: (str) -> None
+        if message is None:
+            if key is None:
+                message = "cannot set the same key multiple times"
+            else:
+                message = "cannot set the same key {} multiple times".format(key)
+
+        super(DuplicateKeyError, self).__init__(message)
+
+
+class UnexpectedCharError(_ParseError):
     """
     An unexpected character was found during parsing.
     """
 
-    def __init__(self, line, col, char):  # type: (int, int, str) -> None
-        message = "Unexpected character: {}".format(repr(char))
+    def __init__(self, char=None, message=None):  # type: (str) -> None
+        if message is None:
+            if char is None:
+                message = "unexpected character"
+            else:
+                message = "unexpected character {}".format(repr(char))
 
-        super(UnexpectedCharError, self).__init__(line, col, message=message)
+        super(UnexpectedCharError, self).__init__(message)
 
 
-class EmptyKeyError(ParseError):
+class EmptyKeyError(_ParseError):
     """
     An empty key was found during parsing.
     """
 
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Empty key"
+    def __init__(self, message=None):  # type: (str) -> None
+        if message is None:
+            message = "empty key"
 
-        super(EmptyKeyError, self).__init__(line, col, message=message)
+        super(EmptyKeyError, self).__init__(message)
 
 
-class EmptyTableNameError(ParseError):
+class EmptyTableNameError(_ParseError):
     """
     An empty table name was found during parsing.
     """
 
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Empty table name"
+    def __init__(self, message=None):  # type: (str) -> None
+        if message is None:
+            message = "empty table name"
 
-        super(EmptyTableNameError, self).__init__(line, col, message=message)
+        super(EmptyTableNameError, self).__init__(message)
 
 
-class InvalidCharInStringError(ParseError):
+class InvalidCharInStringError(_ParseError):
     """
     The string being parsed contains an invalid character.
     """
 
-    def __init__(self, line, col, char):  # type: (int, int, str) -> None
-        message = "Invalid character {} in string".format(repr(char))
+    def __init__(self, char=None, message=None):  # type: (str) -> None
+        if message is None:
+            if char is None:
+                message = "invalid character in string"
+            else:
+                message = "invalid character {} in string".format(repr(char))
 
-        super(InvalidCharInStringError, self).__init__(line, col, message=message)
+        super(InvalidCharInStringError, self).__init__(message)
 
 
-class UnexpectedEofError(ParseError):
+class UnexpectedEofError(_ParseError):
     """
     The TOML being parsed ended before the end of a statement.
     """
 
-    def __init__(self, line, col):  # type: (int, int) -> None
-        message = "Unexpected end of file"
+    def __init__(self, message=None):  # type: (str) -> None
+        if message is None:
+            message = "unexpected end of file"
 
-        super(UnexpectedEofError, self).__init__(line, col, message=message)
-
-
-class InternalParserError(ParseError):
-    """
-    An error that indicates a bug in the parser.
-    """
-
-    def __init__(
-        self, line, col, message=None
-    ):  # type: (int, int, Optional[str]) -> None
-        msg = "Internal parser error"
-        if message:
-            msg += " ({})".format(message)
-
-        super(InternalParserError, self).__init__(line, col, message=msg)
-
-
-class NonExistentKey(KeyError, TOMLKitError):
-    """
-    A non-existent key was used.
-    """
-
-    def __init__(self, key):
-        message = 'Key "{}" does not exist.'.format(key)
-
-        super(NonExistentKey, self).__init__(message)
-
-
-class KeyAlreadyPresent(TOMLKitError):
-    """
-    An already present key was used.
-    """
-
-    def __init__(self, key):
-        message = 'Key "{}" already exists.'.format(key)
-
-        super(KeyAlreadyPresent, self).__init__(message)
+        super(UnexpectedEofError, self).__init__(message)

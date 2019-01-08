@@ -4,17 +4,18 @@ from __future__ import unicode_literals
 import copy
 import json
 import pickle
+from textwrap import dedent
 
 from datetime import datetime
 
-from tomlkit import parse
+from tomlkit import loads, flatten
 from tomlkit._utils import _utc
 
 
 def test_document_is_a_dict(example):
     content = example("example")
 
-    doc = parse(content)
+    doc = loads(content)
 
     assert isinstance(doc, dict)
     assert "owner" in doc
@@ -35,7 +36,7 @@ def test_document_is_a_dict(example):
     assert database["server"] == "192.168.1.1"
     assert database["ports"] == [8001, 8001, 8002]
     assert database["connection_max"] == 5000
-    assert database["enabled"] is True
+    assert database["enabled"] == True
 
     # servers
     servers = doc["servers"]
@@ -81,47 +82,52 @@ def test_document_is_a_dict(example):
     assert doc["products"][1]["color"] == "black"
     assert nail.get("color") == "black"
 
-    content = """foo = "bar"
-"""
+    content = 'foo = "bar"'
 
-    doc = parse(content)
+    doc = loads(content)
     doc.update({"bar": "baz"})
 
-    assert (
-        doc.as_string()
-        == """foo = "bar"
-bar = "baz"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = "bar"
+        bar = "baz"
+        """
     )
 
     doc.update({"bar": "boom"})
 
-    assert (
-        doc.as_string()
-        == """foo = "bar"
-bar = "boom"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = "bar"
+        bar = "boom"
+        """
     )
 
 
 def test_toml_document_without_super_tables():
-    content = """[tool.poetry]
-name = "foo"
-"""
+    content = dedent(
+        """\
+        [tool.poetry]
+        name = "foo"
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
     assert "tool" in doc
     assert "poetry" in doc["tool"]
 
     assert doc["tool"]["poetry"]["name"] == "foo"
+    assert doc["tool", "poetry"]["name"] == "foo"
+    assert doc["tool"]["poetry", "name"] == "foo"
+    assert doc["tool", "poetry", "name"] == "foo"
 
     doc["tool"]["poetry"]["name"] = "bar"
 
-    assert (
-        doc.as_string()
-        == """[tool.poetry]
-name = "bar"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        [tool.poetry]
+        name = "bar"
+        """
     )
 
     d = {}
@@ -133,7 +139,7 @@ name = "bar"
 def test_toml_document_with_dotted_keys(example):
     content = example("0.5.0")
 
-    doc = parse(content)
+    doc = loads(content)
 
     assert "physical" in doc
     assert "color" in doc["physical"]
@@ -152,7 +158,7 @@ def test_toml_document_with_dotted_keys(example):
 def test_toml_document_super_table_with_different_sub_sections(example):
     content = example("pyproject")
 
-    doc = parse(content)
+    doc = loads(content)
     tool = doc["tool"]
 
     assert "poetry" in tool
@@ -160,37 +166,43 @@ def test_toml_document_super_table_with_different_sub_sections(example):
 
 
 def test_adding_an_element_to_existing_table_with_ws_remove_ws():
-    content = """[foo]
+    content = dedent(
+        """\
+        [foo]
 
-[foo.bar]
+        [foo.bar]
 
-"""
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
     doc["foo"]["int"] = 34
 
-    expected = """[foo]
-int = 34
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        int = 34
 
-[foo.bar]
-
-"""
-
-    assert expected == doc.as_string()
+        [foo.bar]
+        """
+    )
 
 
 def test_document_with_aot_after_sub_tables():
-    content = """[foo.bar]
-name = "Bar"
+    content = dedent(
+        """\
+        [foo.bar]
+        name = "Bar"
 
-[foo.bar.baz]
-name = "Baz"
+        [foo.bar.baz]
+        name = "Baz"
 
-[[foo.bar.tests]]
-name = "Test 1"
-"""
+        [[foo.bar.tests]]
+        name = "Test 1"
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
     assert doc["foo"]["bar"]["tests"][0]["name"] == "Test 1"
 
 
@@ -265,41 +277,44 @@ name = "Baz"
 
 
 def test_inserting_after_element_with_no_new_line_adds_a_new_line():
-    doc = parse("foo = 10")
+    doc = loads("foo = 10")
     doc["bar"] = 11
 
-    expected = """foo = 10
-bar = 11
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = 10
+        bar = 11
+        """
+    )
 
-    assert expected == doc.as_string()
-
-    doc = parse("# Comment")
+    doc = loads("# Comment")
     doc["bar"] = 11
 
-    expected = """# Comment
-bar = 11
-"""
-
-    assert expected == doc.as_string()
+    assert flatten(doc) == dedent(
+        """\
+        # Comment
+        bar = 11
+        """
+    )
 
 
 def test_inserting_after_deletion():
-    doc = parse("foo = 10\n")
+    doc = loads("foo = 10\n")
     del doc["foo"]
 
     doc["bar"] = 11
 
-    expected = """bar = 11
-"""
-
-    assert expected == doc.as_string()
+    assert flatten(doc) == dedent(
+        """\
+        bar = 11
+        """
+    )
 
 
 def test_toml_document_with_dotted_keys_inside_table(example):
     content = example("0.5.0")
 
-    doc = parse(content)
+    doc = loads(content)
     t = doc["table"]
 
     assert "a" in t
@@ -312,7 +327,7 @@ def test_toml_document_with_dotted_keys_inside_table(example):
 def test_toml_document_with_super_aot_after_super_table(example):
     content = example("pyproject")
 
-    doc = parse(content)
+    doc = loads(content)
     aot = doc["tool"]["foo"]
 
     assert isinstance(aot, list)
@@ -325,70 +340,92 @@ def test_toml_document_with_super_aot_after_super_table(example):
 
 
 def test_toml_document_has_always_a_new_line_after_table_header():
-    content = """[section.sub]"""
+    content = dedent(
+        """\
+        [section.sub]
+        """
+    )
 
-    doc = parse(content)
-    assert doc.as_string() == """[section.sub]"""
+    doc = loads(content)
+    assert flatten(doc) == dedent(
+        """\
+        [section.sub]
+        """
+    )
 
     doc["section"]["sub"]["foo"] = "bar"
-    assert (
-        doc.as_string()
-        == """[section.sub]
-foo = "bar"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        [section.sub]
+        foo = "bar"
+        """
     )
 
     del doc["section"]["sub"]["foo"]
 
-    assert doc.as_string() == """[section.sub]"""
+    assert flatten(doc) == dedent(
+        """\
+        [section.sub]
+        """
+    )
 
 
 def test_toml_document_is_pickable(example):
     content = example("example")
 
-    doc = parse(content)
-    assert pickle.loads(pickle.dumps(doc)).as_string() == content
+    doc = loads(content)
+    assert flatten(pickle.loads(pickle.dumps(doc))) == content
 
 
 def test_toml_document_set_super_table_element():
-    content = """[site.user]
-name = "John"
-"""
+    content = dedent(
+        """\
+        [site.user]
+        name = "John"
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
     doc["site"]["user"] = "Tom"
 
-    assert (
-        doc.as_string()
-        == """[site]
-user = "Tom"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        [site]
+        user = "Tom"
+        """
     )
 
 
 def test_toml_document_can_be_copied():
-    content = "[foo]\nbar=1"
+    content = dedent(
+        """\
+        [foo]
+        bar=1
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
     doc = copy.copy(doc)
 
-    assert (
-        doc.as_string()
-        == """[foo]
-bar=1"""
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        bar=1
+        """
     )
 
     assert doc == {"foo": {"bar": 1}}
     assert doc["foo"]["bar"] == 1
     assert json.loads(json.dumps(doc)) == {"foo": {"bar": 1}}
 
-    doc = parse(content)
+    doc = loads(content)
     doc = doc.copy()
 
-    assert (
-        doc.as_string()
-        == """[foo]
-bar=1"""
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        bar=1
+        """
     )
 
     assert doc == {"foo": {"bar": 1}}

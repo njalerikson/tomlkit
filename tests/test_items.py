@@ -4,26 +4,27 @@ from __future__ import unicode_literals
 import math
 import pickle
 import pytest
+from textwrap import dedent
 
 from datetime import date
 from datetime import datetime
 from datetime import time
 from datetime import timedelta
 
-from tomlkit import inline_table
-from tomlkit import parse
+# from tomlkit import inline_table
+from tomlkit import loads, dumps, flatten, toml
 from tomlkit._compat import PY2
-from tomlkit.exceptions import NonExistentKey
-from tomlkit.items import InlineTable
-from tomlkit.items import Integer
-from tomlkit.items import Key
-from tomlkit.items import KeyType
-from tomlkit.items import String
-from tomlkit.items import StringType
-from tomlkit.items import Table
-from tomlkit.items import Trivia
-from tomlkit.items import item
-from tomlkit.parser import Parser
+
+# from tomlkit.exceptions import NonExistentKey
+# from tomlkit.items import InlineTable
+from tomlkit.items import Key, KeyType
+from tomlkit.items import Bool
+from tomlkit.items import String, StringType
+from tomlkit.items import DateTime, Date, Time, Integer, Float
+from tomlkit.items import Table, Array
+
+# from tomlkit.items import item
+# from tomlkit.parser import Parser
 
 
 def test_key_comparison():
@@ -36,71 +37,100 @@ def test_key_comparison():
 
 
 def test_items_can_be_appended_to_and_removed_from_a_table():
-    string = """[table]
-"""
+    content = "[table]"
 
-    parser = Parser(string)
-    _, table = parser._parse_table()
+    doc = loads(content)
+    table = doc["table"]
 
     assert isinstance(table, Table)
-    assert "" == table.as_string()
+    assert table.complexity is True
+    assert flatten(table) == ""
 
-    table.append(Key("foo"), String(StringType.SLB, "bar", "bar", Trivia(trail="\n")))
+    table["foo"] = String("bar", StringType.BASIC)
 
-    assert 'foo = "bar"\n' == table.as_string()
-
-    table.append(
-        Key("baz"),
-        Integer(34, Trivia(comment_ws="   ", comment="# Integer", trail=""), "34"),
+    assert flatten(table) == dedent(
+        """\
+        foo = "bar"
+        """
     )
 
-    assert 'foo = "bar"\nbaz = 34   # Integer' == table.as_string()
+    table["baz"] = 34
 
-    table.remove(Key("baz"))
+    assert flatten(table) == dedent(
+        """\
+        foo = "bar"
+        baz = 34
+        """
+    )
 
-    assert 'foo = "bar"\n' == table.as_string()
+    table["baz"].comment = "Integer"
 
-    table.remove(Key("foo"))
+    assert flatten(table) == dedent(
+        """\
+        foo = "bar"
+        baz = 34  # Integer
+        """
+    )
 
-    assert "" == table.as_string()
+    del table["baz"]
 
-    with pytest.raises(NonExistentKey):
-        table.remove(Key("foo"))
+    assert flatten(table) == dedent(
+        """\
+        foo = "bar"
+        """
+    )
+
+    del table["foo"]
+
+    assert flatten(table) == ""
+
+    with pytest.raises(KeyError):
+        del table["foo"]
 
 
 def test_items_can_be_appended_to_and_removed_from_an_inline_table():
-    string = """table = {}
-"""
+    content = "table = {}"
 
-    parser = Parser(string)
-    _, table = parser._parse_item()
+    doc = loads(content)
+    table = doc["table"]
 
-    assert isinstance(table, InlineTable)
-    assert "{}" == table.as_string()
+    assert isinstance(table, Table)
+    assert table.complexity is False
+    assert flatten(table) == "{}"
 
-    table.append(Key("foo"), String(StringType.SLB, "bar", "bar", Trivia(trail="")))
+    table["foo"] = String("bar", StringType.BASIC)
 
-    assert '{foo = "bar"}' == table.as_string()
+    assert flatten(table) == '{foo = "bar"}'
 
-    table.append(Key("baz"), Integer(34, Trivia(trail=""), "34"))
+    table["baz"] = 34
 
-    assert '{foo = "bar", baz = 34}' == table.as_string()
+    assert flatten(table) == '{foo = "bar", baz = 34}'
 
-    table.remove(Key("baz"))
+    table["baz"].comment = "Integer"
 
-    assert '{foo = "bar"}' == table.as_string()
+    assert flatten(table) == dedent(
+        """\
+        foo = "bar"
+        baz = 34  # Integer
+        """
+    )
 
-    table.remove(Key("foo"))
+    del table["baz"]
 
-    assert "{}" == table.as_string()
+    assert flatten(table) == '{foo = "bar"}'
 
-    with pytest.raises(NonExistentKey):
-        table.remove(Key("foo"))
+    del table["foo"]
+
+    assert flatten(table) == "{}"
+
+    with pytest.raises(KeyError):
+        del table["foo"]
 
 
 def test_inf_and_nan_are_supported(example):
     content = example("0.5.0")
-    doc = parse(content)
+
+    doc = loads(content)
 
     assert doc["sf1"] == float("inf")
     assert doc["sf2"] == float("inf")
@@ -113,7 +143,8 @@ def test_inf_and_nan_are_supported(example):
 
 def test_hex_octal_and_bin_integers_are_supported(example):
     content = example("0.5.0")
-    doc = parse(content)
+
+    doc = loads(content)
 
     assert doc["hex1"] == 3735928559
     assert doc["hex2"] == 3735928559
@@ -128,303 +159,509 @@ def test_hex_octal_and_bin_integers_are_supported(example):
 def test_key_automatically_sets_proper_string_type_if_not_bare():
     key = Key("foo.bar")
 
-    assert key.t == KeyType.Basic
+    assert key._t == KeyType.BASIC
 
 
 def test_array_behaves_like_a_list():
-    a = item([1, 2])
+    doc = toml([1, 2], base=Array)
 
-    assert a == [1, 2]
-    assert a.as_string() == "[1, 2]"
+    assert doc == [1, 2]
+    assert flatten(doc) == "[1, 2]"
 
-    a += [3, 4]
-    assert a == [1, 2, 3, 4]
-    assert a.as_string() == "[1, 2, 3, 4]"
+    doc += [3, 4]
+    assert doc == [1, 2, 3, 4]
+    assert flatten(doc) == dedent(
+        """\
+        [
+            1,
+            2,
+            3,
+            4,
+        ]"""
+    )
 
-    del a[2]
-    assert a == [1, 2, 4]
-    assert a.as_string() == "[1, 2, 4]"
+    del doc[2]
+    assert doc == [1, 2, 4]
+    assert flatten(doc) == "[1, 2, 4]"
 
-    del a[-1]
-    assert a == [1, 2]
-    assert a.as_string() == "[1, 2]"
+    del doc[-1]
+    assert doc == [1, 2]
+    assert flatten(doc) == "[1, 2]"
 
-    del a[-2]
-    assert a == [2]
-    assert a.as_string() == "[2]"
+    del doc[-2]
+    assert doc == [2]
+    assert flatten(doc) == "[2]"
 
     if not PY2:
-        a.clear()
-        assert a == []
-        assert a.as_string() == "[]"
+        doc.clear()
+        assert doc == []
+        assert flatten(doc) == "[]"
 
-    content = """a = [1, 2] # Comment
-"""
-    doc = parse(content)
+    content = "a = [1, 2] # Comment"
+
+    doc = loads(content)
 
     assert doc["a"] == [1, 2]
     doc["a"] += [3, 4]
     assert doc["a"] == [1, 2, 3, 4]
-    assert (
-        doc.as_string()
-        == """a = [1, 2, 3, 4] # Comment
-"""
+    assert flatten(doc) == dedent(
+        """\
+        a = [
+            1,
+            2,
+            3,
+            4,
+        ]  # Comment
+        """
     )
 
 
 def test_dicts_are_converted_to_tables():
-    t = item({"foo": {"bar": "baz"}})
+    doc = toml({"foo": {"bar": "baz"}})
 
-    assert (
-        t.as_string()
-        == """[foo]
-bar = "baz"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = {bar = "baz"}
+        """
+    )
+
+    doc["foo"].complexity = True
+
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        bar = "baz"
+        """
     )
 
 
 def test_dicts_are_converted_to_tables_and_sorted():
-    t = item({"foo": {"bar": "baz", "abc": 123, "baz": [{"c": 3, "b": 2, "a": 1}]}})
+    doc = toml({"foo": {"bar": "baz", "abc": 123, "baz": [{"c": 3, "b": 2, "a": 1}]}})
 
-    assert (
-        t.as_string()
-        == """[foo]
-abc = 123
-bar = "baz"
+    assert flatten(doc) == dedent(
+        """\
+        foo = {bar = "baz", abc = 123, baz = [{c = 3, b = 2, a = 1}]}
+        """
+    )
 
-[[foo.baz]]
-a = 1
-b = 2
-c = 3
-"""
+    doc["foo"].complexity = True
+
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        bar = "baz"
+        abc = 123
+        baz = [{c = 3, b = 2, a = 1}]
+        """
+    )
+
+    doc["foo", "baz"].complexity = True
+
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        bar = "baz"
+        abc = 123
+
+        [[foo.baz]]
+        c = 3
+        b = 2
+        a = 1
+        """
     )
 
 
 def test_dicts_with_sub_dicts_are_properly_converted():
-    t = item({"foo": {"bar": {"string": "baz"}, "int": 34, "float": 3.14}})
+    doc = toml({"foo": {"bar": {"string": "baz"}, "int": 34, "float": 3.14}})
 
-    assert (
-        t.as_string()
-        == """[foo]
-float = 3.14
-int = 34
+    assert flatten(doc) == dedent(
+        """\
+        foo = {bar = {string = "baz"}, int = 34, float = 3.140000}
+        """
+    )
 
-[foo.bar]
-string = "baz"
-"""
+    doc["foo"].complexity = True
+
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        bar = {string = "baz"}
+        int = 34
+        float = 3.140000
+        """
+    )
+
+    doc["foo", "bar"].complexity = True
+
+    assert flatten(doc) == dedent(
+        """\
+        [foo]
+        int = 34
+        float = 3.140000
+
+        [foo.bar]
+        string = "baz"
+        """
     )
 
 
 def test_item_array_of_dicts_converted_to_aot():
-    a = item({"foo": [{"bar": "baz"}]})
+    doc = toml({"foo": [{"bar": "baz"}]})
 
-    assert (
-        a.as_string()
-        == """[[foo]]
-bar = "baz"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = [{bar = "baz"}]
+        """
+    )
+
+    doc["foo"].complexity = True
+
+    assert flatten(doc) == dedent(
+        """\
+        [[foo]]
+        bar = "baz"
+        """
     )
 
 
 def test_integers_behave_like_ints():
-    i = item(34)
+    doc = toml({"i": 34})
 
+    i = doc["i"]
     assert i == 34
-    assert i.as_string() == "34"
+    assert isinstance(i, int) and isinstance(i, Integer)
+
+    ii = i + 1
+    assert ii == 35
+    assert isinstance(ii, int) and not isinstance(ii, Integer)
 
     i += 1
     assert i == 35
-    assert i.as_string() == "35"
+    assert isinstance(i, int) and not isinstance(i, Integer)
 
-    i -= 2
+    i = doc["i"]
+    ii = i - 1
+    assert ii == 33
+    assert isinstance(ii, int) and not isinstance(ii, Integer)
+
+    i -= 1
     assert i == 33
-    assert i.as_string() == "33"
+    assert isinstance(i, int) and not isinstance(i, Integer)
 
-    doc = parse("int = +34")
-    doc["int"] += 1
+    assert flatten(doc) == dedent(
+        """\
+        i = 34
+        """
+    )
 
-    assert doc.as_string() == "int = +35"
+    doc["i"] += 1
+    assert doc["i"] == 35
+    assert flatten(doc) == dedent(
+        """\
+        i = 35
+        """
+    )
+
+    doc["i"] -= 2
+    assert doc["i"] == 33
+    assert flatten(doc) == dedent(
+        """\
+        i = 33
+        """
+    )
 
 
 def test_floats_behave_like_floats():
-    i = item(34.12)
+    doc = toml({"f": 34.12})
 
-    assert i == 34.12
-    assert i.as_string() == "34.12"
+    f = doc["f"]
+    assert f == 34.12
+    assert isinstance(f, float) and isinstance(f, Float)
 
-    i += 1
-    assert i == 35.12
-    assert i.as_string() == "35.12"
+    ff = f + 1
+    assert ff == 35.12
+    assert isinstance(ff, float) and not isinstance(ff, Float)
 
-    i -= 2
-    assert i == 33.12
-    assert i.as_string() == "33.12"
+    f += 1
+    assert f == 35.12
+    assert isinstance(f, float) and not isinstance(f, Float)
 
-    doc = parse("float = +34.12")
-    doc["float"] += 1
+    f = doc["f"]
+    ff = f - 1
+    assert ff == 33.12
+    assert isinstance(ff, float) and not isinstance(ff, Float)
 
-    assert doc.as_string() == "float = +35.12"
+    f -= 1
+    assert f == 33.12
+    assert isinstance(f, float) and not isinstance(f, Float)
+
+    assert flatten(doc) == dedent(
+        """\
+        f = 34.120000
+        """
+    )
+
+    doc["f"] += 1
+    assert doc["f"] == 35.12
+    assert flatten(doc) == dedent(
+        """\
+        f = 35.120000
+        """
+    )
+
+    doc["f"] -= 2
+    assert doc["f"] == 33.12
+    assert flatten(doc) == dedent(
+        """\
+        f = 33.120000
+        """
+    )
 
 
 def test_datetimes_behave_like_datetimes():
-    i = item(datetime(2018, 7, 22, 12, 34, 56))
+    doc = toml({"dt": datetime(2018, 7, 22, 12, 34, 56)})
 
-    assert i == datetime(2018, 7, 22, 12, 34, 56)
-    assert i.as_string() == "2018-07-22T12:34:56"
+    d = doc["dt"]
+    assert d == datetime(2018, 7, 22, 12, 34, 56)
+    assert isinstance(d, datetime) and isinstance(d, DateTime)
 
-    i += timedelta(days=1)
-    assert i == datetime(2018, 7, 23, 12, 34, 56)
-    assert i.as_string() == "2018-07-23T12:34:56"
+    dd = d + timedelta(days=1)
+    assert dd == datetime(2018, 7, 23, 12, 34, 56)
+    assert isinstance(dd, datetime) and not isinstance(dd, DateTime)
 
-    i -= timedelta(days=2)
-    assert i == datetime(2018, 7, 21, 12, 34, 56)
-    assert i.as_string() == "2018-07-21T12:34:56"
+    d += timedelta(days=1)
+    assert d == datetime(2018, 7, 23, 12, 34, 56)
+    assert isinstance(d, datetime) and not isinstance(d, DateTime)
 
-    doc = parse("dt = 2018-07-22T12:34:56-05:00")
+    dd = d - timedelta(days=2)
+    assert dd == datetime(2018, 7, 21, 12, 34, 56)
+    assert isinstance(dd, datetime) and not isinstance(dd, DateTime)
+
+    d -= timedelta(days=2)
+    assert d == datetime(2018, 7, 21, 12, 34, 56)
+    assert isinstance(d, datetime) and not isinstance(d, DateTime)
+
+    assert flatten(doc) == dedent(
+        """\
+        dt = 2018-07-22 12:34:56
+        """
+    )
+
     doc["dt"] += timedelta(days=1)
+    assert doc["dt"] == datetime(2018, 7, 23, 12, 34, 56)
+    assert flatten(doc) == dedent(
+        """\
+        dt = 2018-07-23 12:34:56
+        """
+    )
 
-    assert doc.as_string() == "dt = 2018-07-23T12:34:56-05:00"
+    doc["dt"] -= timedelta(days=2)
+    assert doc["dt"] == datetime(2018, 7, 21, 12, 34, 56)
+    assert flatten(doc) == dedent(
+        """\
+        dt = 2018-07-21 12:34:56
+        """
+    )
 
 
 def test_dates_behave_like_dates():
-    i = item(date(2018, 7, 22))
+    doc = toml({"d": date(2018, 7, 22)})
 
-    assert i == date(2018, 7, 22)
-    assert i.as_string() == "2018-07-22"
+    d = doc["d"]
+    assert d == date(2018, 7, 22)
+    assert isinstance(d, date) and isinstance(d, Date)
 
-    i += timedelta(days=1)
-    assert i == datetime(2018, 7, 23)
-    assert i.as_string() == "2018-07-23"
+    dd = d + timedelta(days=1)
+    assert dd == date(2018, 7, 23)
+    assert isinstance(dd, date) and not isinstance(dd, Date)
 
-    i -= timedelta(days=2)
-    assert i == date(2018, 7, 21)
-    assert i.as_string() == "2018-07-21"
+    d += timedelta(days=1)
+    assert d == date(2018, 7, 23)
+    assert isinstance(d, date) and not isinstance(d, Date)
 
-    doc = parse("dt = 2018-07-22 # Comment")
-    doc["dt"] += timedelta(days=1)
+    dd = d - timedelta(days=2)
+    assert dd == date(2018, 7, 21)
+    assert isinstance(dd, date) and not isinstance(dd, Date)
 
-    assert doc.as_string() == "dt = 2018-07-23 # Comment"
+    d -= timedelta(days=2)
+    assert d == date(2018, 7, 21)
+    assert isinstance(d, date) and not isinstance(d, Date)
+
+    assert flatten(doc) == dedent(
+        """\
+        d = 2018-07-22
+        """
+    )
+
+    doc["d"] += timedelta(days=1)
+    assert doc["d"] == datetime(2018, 7, 23)
+    assert flatten(doc) == dedent(
+        """\
+        d = 2018-07-23
+        """
+    )
+
+    doc["d"] -= timedelta(days=2)
+    assert doc["d"] == date(2018, 7, 21)
+    assert flatten(doc) == dedent(
+        """\
+        d = 2018-07-21
+        """
+    )
 
 
 def test_times_behave_like_times():
-    i = item(time(12, 34, 56))
+    doc = toml({"t": time(12, 34, 56)})
 
-    assert i == time(12, 34, 56)
-    assert i.as_string() == "12:34:56"
+    t = doc["t"]
+    assert t == time(12, 34, 56)
+    assert flatten(t) == "12:34:56"
+
+    assert flatten(doc) == dedent(
+        """\
+        t = 12:34:56
+        """
+    )
 
 
 def test_strings_behave_like_strs():
-    i = item("foo")
+    doc = toml({"s": "foo"})
 
-    assert i == "foo"
-    assert i.as_string() == '"foo"'
+    s = doc["s"]
+    assert s == "foo"
+    assert isinstance(s, str) and isinstance(s, String)
 
-    i += " bar"
-    assert i == "foo bar"
-    assert i.as_string() == '"foo bar"'
+    ss = s + " bar"
+    assert ss == "foo bar"
+    assert isinstance(ss, str) and not isinstance(ss, String)
 
-    i += " é"
-    assert i == "foo bar é"
-    assert i.as_string() == '"foo bar é"'
+    s += " bar"
+    assert s == "foo bar"
+    assert isinstance(s, str) and not isinstance(s, String)
 
-    doc = parse('str = "foo" # Comment')
-    doc["str"] += " bar"
+    assert flatten(doc) == dedent(
+        """\
+        s = "foo"
+        """
+    )
 
-    assert doc.as_string() == 'str = "foo bar" # Comment'
+    doc["s"] += " bar"
+    assert doc["s"] == "foo bar"
+    assert flatten(doc) == dedent(
+        """\
+        s = "foo bar"
+        """
+    )
+
+    doc["s"] += " é"
+    assert doc["s"] == "foo bar é"
+    assert flatten(doc) == dedent(
+        """\
+        s = "foo bar é"
+        """
+    )
 
 
 def test_tables_behave_like_dicts():
-    t = item({"foo": "bar"})
+    doc = toml({"foo": "bar"})
 
-    assert (
-        t.as_string()
-        == """foo = "bar"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = "bar"
+        """
     )
 
-    t.update({"bar": "baz"})
+    doc.update({"bar": "baz"})
 
-    assert (
-        t.as_string()
-        == """foo = "bar"
-bar = "baz"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = "bar"
+        bar = "baz"
+        """
     )
 
-    t.update({"bar": "boom"})
+    doc.update({"bar": "boom"})
 
-    assert (
-        t.as_string()
-        == """foo = "bar"
-bar = "boom"
-"""
+    assert flatten(doc) == dedent(
+        """\
+        foo = "bar"
+        bar = "boom"
+        """
     )
 
 
 def test_items_are_pickable():
-    n = item(12)
+    n = Integer(12)
 
     s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == "12"
+    assert flatten(pickle.loads(s)) == "12"
 
-    n = item(12.34)
-
-    s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == "12.34"
-
-    n = item(True)
+    n = Float(12.34)
 
     s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == "true"
+    assert flatten(pickle.loads(s)) == "12.340000"
 
-    n = item(datetime(2018, 10, 11, 12, 34, 56, 123456))
-
-    s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == "2018-10-11T12:34:56.123456"
-
-    n = item(date(2018, 10, 11))
+    n = Bool(True)
 
     s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == "2018-10-11"
+    assert flatten(pickle.loads(s)) == "true"
 
-    n = item(time(12, 34, 56, 123456))
-
-    s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == "12:34:56.123456"
-
-    n = item([1, 2, 3])
+    n = DateTime(datetime(2018, 10, 11, 12, 34, 56, 123456))
 
     s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == "[1, 2, 3]"
+    assert flatten(pickle.loads(s)) == "2018-10-11T12:34:56.123456"
 
-    n = item({"foo": "bar"})
+    n = Date(date(2018, 10, 11))
 
     s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == 'foo = "bar"\n'
+    assert flatten(pickle.loads(s)) == "2018-10-11"
 
-    n = inline_table()
+    n = Time(time(12, 34, 56, 123456))
+
+    s = pickle.dumps(n)
+    assert flatten(pickle.loads(s)) == "12:34:56.123456"
+
+    n = Array([1, 2, 3])
+
+    s = pickle.dumps(n)
+    assert flatten(pickle.loads(s)) == "[1, 2, 3]"
+
+    n = Table({"foo": "bar"})
+
+    s = pickle.dumps(n)
+    assert flatten(pickle.loads(s)) == dedent(
+        """\
+        foo = "bar"
+        """
+    )
+
+    n = Table()
     n["foo"] = "bar"
 
     s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == '{foo = "bar"}'
+    assert flatten(pickle.loads(s)) == '{foo = "bar"}'
 
-    n = item("foo")
-
-    s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == '"foo"'
-
-    n = item([{"foo": "bar"}])
+    n = String("foo")
 
     s = pickle.dumps(n)
-    assert pickle.loads(s).as_string() == 'foo = "bar"\n'
+    assert flatten(pickle.loads(s)) == '"foo"'
+
+    n = Array([{"foo": "bar"}])
+
+    s = pickle.dumps(n)
+    assert flatten(pickle.loads(s)) == dedent(
+        """\
+        foo = "bar"
+        """
+    )
 
 
-def test_trim_comments_when_building_inline_table():
-    table = inline_table()
-    row = parse('foo = "bar"  # Comment')
-    table.update(row)
-    assert table.as_string() == '{foo = "bar"}'
-    value = item("foobaz")
-    value.comment("Another comment")
-    table.append("baz", value)
-    assert "# Another comment" not in table.as_string()
+# def test_trim_comments_when_building_inline_table():
+#     table = inline_table()
+#     row = parse('foo = "bar"  # Comment')
+#     table.update(row)
+#     assert flatten(table) == '{foo = "bar"}'
+#     value = item("foobaz")
+#     value.comment("Another comment")
+#     table.append("baz", value)
+#     assert "# Another comment" not in flatten(table)

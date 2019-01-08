@@ -32,7 +32,7 @@ def parse_escaped(src, multi):
         # the escape followed by whitespace must have a newline
         # before any other chars
         if "\n" not in tmp:
-            raise src.parse_error(InvalidCharInStringError, src.current)
+            raise src.parse_error(InvalidCharInStringError(src.current))
 
         return ""
 
@@ -56,7 +56,7 @@ def parse_escaped(src, multi):
         src.consume(chars.hex, min=count, max=count)
         return chr(int(src[mark : src.idx], 16))
 
-    raise src.parse_error(InvalidCharInStringError, src.current)
+    raise src.parse_error(InvalidCharInStringError(src.current))
 
 
 def parse_string(style, src, multi=True):
@@ -79,7 +79,7 @@ def parse_string(style, src, multi=True):
     while True:
         if not multi and src.current in "\r\n":
             # single line cannot have actual newline characters
-            raise src.parse_error(InvalidCharInStringError, src.current)
+            raise src.parse_error(InvalidCharInStringError(src.current))
         elif not escaped and src.current == style.close:
             # try to process current as a closing delim
             close_count = src.consume(style.close, min=1, max=open_count)
