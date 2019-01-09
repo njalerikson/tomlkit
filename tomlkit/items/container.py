@@ -418,7 +418,16 @@ class Table(_Scalars, dict):
             # this key has been set before, no need to insert a new link
             link = super(Table, self).__getitem__(key)
 
-            # update value and check for complexity change
+            ovalue = self._value_map[link]
+            if value is ovalue:
+                # already set
+                return
+
+            if isinstance(ovalue, _Container):
+                # this is a nested container
+                ovalue.clear()
+
+            # update value
             self._set_value(link, value)
         except KeyError:
             # this is a new key, inserting a new link
@@ -432,12 +441,6 @@ class Table(_Scalars, dict):
             super(Table, self).__setitem__(link.key[-1], link)
 
     def _set_value(self, link, value, insert_link=lambda _: None):
-        try:
-            if self._value_map[link] is value:
-                return
-        except KeyError:
-            pass
-
         if isinstance(value, Mapping):
             insert_link(True)
             value = Table(value=value, parent=self, handle=link)
@@ -512,14 +515,27 @@ class Table(_Scalars, dict):
         for key, value in kwargs.items():
             self[key] = value
 
-    def __delitem__(self, key):
-        if isinstance(key, tuple):
-            del self.__getitem__(key[:-1])[key[-1]]
-            return
+    def pop(self, *args, _return=True):
+        if len(args) == 0:
+            raise TypeError("pop expected at least 1 arguments, got 0")
+        elif len(args) > 2:
+            raise TypeError(
+                "pop expected at most 2 arguments, got {}".format(len(args))
+            )
 
-        # fetch link, delete link
-        link = super(Table, self).__getitem__(key)
-        super(Table, self).__delitem__(key)
+        key = args[0]
+        args = args[1:]
+
+        try:
+            link = super(Table, self).pop(key)
+        except KeyError:
+            if args:
+                return args[0]
+            raise
+
+        # remove value from mapping
+        value = self._value_map.pop(link)
+        tmp = pyobj(value) if _return else None
 
         # remove the link from scope and root
         del link.scope._links[link.key]
@@ -528,13 +544,42 @@ class Table(_Scalars, dict):
         except KeyError:
             pass
 
+        if isinstance(value, _Container):
+            # this is a nested container
+            value.clear()
+
+        return tmp
+
+    def popitem(self):
+        key, link = super(Table, self).popitem()
+
         # remove value from mapping
         value = self._value_map.pop(link)
+        tmp = pyobj(value)
 
-        if isinstance(value, Mapping):
+        # remove the link from scope and root
+        del link.scope._links[link.key]
+        try:
+            del self.root._links[link.key]
+        except KeyError:
+            pass
+
+        if isinstance(value, _Container):
             # this is a nested container
-            for key in list(value.keys()):
-                del value[key]
+            value.clear()
+
+        return key, tmp
+
+    def clear(self):
+        while self:
+            self.popitem()
+
+    def __delitem__(self, key):
+        if isinstance(key, tuple):
+            del self.__getitem__(key[:-1])[key[-1]]
+            return
+
+        self.pop(key, _return=False)
 
     def items(self):
         for k in self:
@@ -808,6 +853,16 @@ class Array(_Scalars, list):
         # can only set an index that already exists, no need to insert a new link
         link = super(Array, self).__getitem__(index)
 
+        ovalue = self._value_map[link]
+        if value is ovalue:
+            # already set
+            return
+
+        if isinstance(ovalue, _Container):
+            # this is a nested container
+            ovalue.clear()
+
+        # update value
         self._set_value(link, value)
 
     def insert(self, index, value):
@@ -929,29 +984,43 @@ class Array(_Scalars, list):
     def append(self, value):
         self.insert(len(self), value)
 
-    def __delitem__(self, index):
-        if isinstance(index, tuple):
-            del self.__getitem__(index[:-1])[index[-1]]
-            return
+    def pop(self, *args, _return=True):
+        if len(args) == 0:
+            args = (-1,)
+        elif len(args) > 1:
+            raise TypeError("pop expected at most 1 argument, got {}".format(len(args)))
 
-        # fetch link, delete link
-        link = super(Array, self).__getitem__(index)
-        super(Array, self).__delitem__(index)
+        index = args[0]
 
-        # remove the link from scope and root
+        link = super(Array, self).pop(index)
+
+        # remove value from mapping
+        value = self._value_map.pop(link)
+        tmp = pyobj(value) if _return else None
+
+        # remove the link from the scope and root
         del link.scope._links[link.key]
         try:
             del self.root._links[link.key]
         except KeyError:
             pass
 
-        # remove value from mapping
-        value = self._value_map.pop(link)
-
-        if isinstance(value, Mapping):
+        if isinstance(value, _Container):
             # this is a nested container
-            for key in list(value.keys()):
-                del value[key]
+            value.clear()
+
+        return tmp
+
+    def clear(self):
+        while self:
+            self.pop()
+
+    def __delitem__(self, index):
+        if isinstance(index, tuple):
+            del self.__getitem__(index[:-1])[index[-1]]
+            return
+
+        self.pop(index, _return=False)
 
     def __iter__(self):
         for i in range(len(self)):
@@ -977,18 +1046,6 @@ class Array(_Scalars, list):
 
         self.extend(other)
         return self
-
-    def pop(self, i=None):
-        if i is None:
-            i = len(self) - 1
-
-        tmp = pyobj(self[i])
-        del self[i]
-        return tmp
-
-    def clear(self):
-        while self:
-            del self[0]
 
     def __flatten__(self):  # type: () -> str
         # this Array is complex, we ignore it

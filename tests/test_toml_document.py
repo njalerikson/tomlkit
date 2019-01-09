@@ -207,72 +207,78 @@ def test_document_with_aot_after_sub_tables():
 
 
 def test_document_with_new_sub_table_after_other_table():
-    content = """[foo]
-name = "Bar"
+    content = dedent(
+        """\
+        [foo]
+        name = "Bar"
 
-[bar]
-name = "Baz"
+        [bar]
+        name = "Baz"
 
-[foo.baz]
-name = "Test 1"
-"""
+        [foo.baz]
+        name = "Test 1"
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
     assert doc["foo"]["name"] == "Bar"
     assert doc["bar"]["name"] == "Baz"
     assert doc["foo"]["baz"]["name"] == "Test 1"
 
-    assert doc.as_string() == content
+    assert flatten(doc) == content
 
 
 def test_document_with_new_sub_table_after_other_table_delete():
-    content = """[foo]
-name = "Bar"
+    content = dedent(
+        """\
+        [foo]
+        name = "Bar"
 
-[bar]
-name = "Baz"
+        [bar]
+        name = "Baz"
 
-[foo.baz]
-name = "Test 1"
-"""
+        [foo.baz]
+        name = "Test 1"
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
 
     del doc["foo"]
 
-    assert (
-        doc.as_string()
-        == """[bar]
-name = "Baz"
-
-"""
+    assert flatten(doc) == dedent(
+        """\
+        [bar]
+        name = "Baz"
+        """
     )
 
 
 def test_document_with_new_sub_table_after_other_table_replace():
-    content = """[foo]
-name = "Bar"
+    content = dedent(
+        """\
+        [foo]
+        name = "Bar"
 
-[bar]
-name = "Baz"
+        [bar]
+        name = "Baz"
 
-[foo.baz]
-name = "Test 1"
-"""
+        [foo.baz]
+        name = "Test 1"
+        """
+    )
 
-    doc = parse(content)
+    doc = loads(content)
 
     doc["foo"] = {"a": "b"}
 
-    assert (
-        doc.as_string()
-        == """[foo]
-a = "b"
+    assert flatten(doc) == dedent(
+        """\
+        foo = {a = "b"}
 
-[bar]
-name = "Baz"
-
-"""
+        [bar]
+        name = "Baz"
+        """
     )
 
 
@@ -387,6 +393,23 @@ def test_toml_document_set_super_table_element():
 
     doc = loads(content)
     doc["site"]["user"] = "Tom"
+
+    assert flatten(doc) == dedent(
+        """\
+        site.user = "Tom"
+        """
+    )
+
+    del doc["site"]["user"]
+    doc["site"]["user"] = "Tom"
+
+    assert flatten(doc) == dedent(
+        """\
+        site = {user = "Tom"}
+        """
+    )
+
+    doc["site"].complexity = True
 
     assert flatten(doc) == dedent(
         """\
