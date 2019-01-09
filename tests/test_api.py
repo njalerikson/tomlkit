@@ -229,12 +229,12 @@ def test_string():
     s = parsers.string.parse("'foo \"'")
 
     assert s == 'foo "'
-    assert flatten(s) == "'foo \\\"'"
+    assert flatten(s) == "'foo \"'"
 
     s = parsers.string.parse('"foo \'"')
 
     assert s == "foo '"
-    assert flatten(s) == '"foo \\\'"'
+    assert flatten(s) == '"foo \'"'
 
 
 def test_item_dict_to_table():
