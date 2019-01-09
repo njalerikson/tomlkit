@@ -60,6 +60,8 @@ def parse_escaped(src, multi):
 
 
 def parse_string(style, src, multi=True):
+    mark = src._idx
+
     # consume opening quotes
     open_count = src.consume(style.open, min=1, max=3 if multi else 1)
 
@@ -88,7 +90,7 @@ def parse_string(style, src, multi=True):
                 value += style.close * close_count
                 continue
 
-            return value, style, multi
+            return value, style, multi, src[mark : src._idx]
         elif style.is_basic() and escaped:
             # attempt to parse the current char as an escaped value, an exception
             # is raised if this fails

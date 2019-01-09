@@ -53,7 +53,7 @@ class String(_Value, unicode):
     """
 
     def __new__(
-        cls, value, t=None, multi=None
+        cls, value, t=None, multi=None, _raw=None
     ):  # type: (str, StringType, bool) -> String
         if isinstance(value, cls):
             return value
@@ -69,14 +69,18 @@ class String(_Value, unicode):
         self = super(String, cls).__new__(cls, value)
         self._t = t
         self._multi = ("\n" in self) if multi is None else bool(multi)
+        self._raw = _raw
         return self
 
     def __init__(
-        self, value, t=None, multi=None
+        self, value, t=None, multi=None, _raw=None
     ):  # type: (str, StringType, bool) -> None
         super(String, self).__init__()
 
     def __flatten__(self):  # type: () -> str
+        if self._raw:
+            return [self._raw]
+
         count = 3 if self._multi else 1
 
         # if BASIC and multiline we need to escape non-newline characters

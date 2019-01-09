@@ -8,7 +8,7 @@ class DateTime(_Value, dt.datetime):
     A datetime literal.
     """
 
-    def __new__(cls, value):  # type: (datetime) -> DateTime
+    def __new__(cls, value, _raw=None):  # type: (datetime) -> DateTime
         if isinstance(value, cls):
             return value
         elif isinstance(value, dt.datetime):
@@ -16,7 +16,7 @@ class DateTime(_Value, dt.datetime):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        return super(DateTime, cls).__new__(
+        self = super(DateTime, cls).__new__(
             cls,
             year=value.year,
             month=value.month,
@@ -28,8 +28,13 @@ class DateTime(_Value, dt.datetime):
             tzinfo=value.tzinfo,
             fold=value.fold,
         )
+        self._raw = _raw
+        return self
 
     def __flatten__(self):  # type: () -> str
+        if self._raw:
+            return [self._raw]
+
         return [self.isoformat(sep=" ")]
 
     def __pyobj__(self):  # type: () -> datetime
@@ -126,7 +131,7 @@ class Date(_Value, dt.date):
     A date literal.
     """
 
-    def __new__(cls, value):  # type: (date) -> Date
+    def __new__(cls, value, _raw=None):  # type: (date) -> Date
         if isinstance(value, cls):
             return value
         elif isinstance(value, dt.date):
@@ -134,11 +139,16 @@ class Date(_Value, dt.date):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        return super(Date, cls).__new__(
+        self = super(Date, cls).__new__(
             cls, year=value.year, month=value.month, day=value.day
         )
+        self._raw = _raw
+        return self
 
     def __flatten__(self):  # type: () -> str
+        if self._raw:
+            return [self._raw]
+
         return [self.isoformat()]
 
     def __pyobj__(self):  # type: () -> date
@@ -175,7 +185,7 @@ class Time(_Value, dt.time):
     A time literal.
     """
 
-    def __new__(cls, value):  # type: (time) -> Time
+    def __new__(cls, value, _raw=None):  # type: (time) -> Time
         if isinstance(value, cls):
             return value
         elif isinstance(value, dt.time):
@@ -183,7 +193,7 @@ class Time(_Value, dt.time):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        return super(Time, cls).__new__(
+        self = super(Time, cls).__new__(
             cls,
             hour=value.hour,
             minute=value.minute,
@@ -192,8 +202,13 @@ class Time(_Value, dt.time):
             tzinfo=value.tzinfo,
             fold=value.fold,
         )
+        self._raw = _raw
+        return self
 
     def __flatten__(self):  # type: () -> str
+        if self._raw:
+            return [self._raw]
+
         return [self.isoformat()]
 
     def __pyobj__(self):  # type: () -> time
@@ -279,7 +294,9 @@ class Integer(_Value, int):
     def _fmt(self):
         return _integerfmt[self.base]
 
-    def __new__(cls, value, ksep=False, base=None):  # type: (int, bool) -> Integer
+    def __new__(
+        cls, value, ksep=False, base=None, _raw=None
+    ):  # type: (int, bool) -> Integer
         if isinstance(value, cls):
             return value
         elif isinstance(value, int):
@@ -298,10 +315,13 @@ class Integer(_Value, int):
         # thousands separator (_)
         self.ksep = ksep
         self.base = _base
-
+        self._raw = _raw
         return self
 
     def __flatten__(self):  # type: () -> str
+        if self._raw:
+            return [self._raw]
+
         return [str(self).replace(",", "_")]
 
     def __str__(self):
@@ -349,7 +369,7 @@ class Float(_Value, float):
         return _floatfmt[self.scientific]
 
     def __new__(
-        cls, value, ksep=False, scientific=False
+        cls, value, ksep=False, scientific=False, _raw=None
     ):  # type: (float, bool) -> Float
         if isinstance(value, cls):
             return value
@@ -369,10 +389,13 @@ class Float(_Value, float):
         # thousands separator (_)
         self.ksep = ksep
         self.scientific = scientific
-
+        self._raw = _raw
         return self
 
     def __flatten__(self):  # type: () -> str
+        if self._raw:
+            return [self._raw]
+
         return [str(self).replace(",", "_")]
 
     def __str__(self):

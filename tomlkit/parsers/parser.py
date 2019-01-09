@@ -112,7 +112,7 @@ class KeyParser(_Parser):
             src.consume(chars.bare)
             value = src[mark : src.idx]
         else:
-            value, style, _ = parse_string(style, src, multi=False)
+            value, style, _, _ = parse_string(style, src, multi=False)
 
         return (value, style)
 
@@ -262,9 +262,10 @@ class BoolParser(_ValueParser):
             return False
 
     def __parse__(self, style, src):  # type: (bool, Source) -> Tuple(bool)
+        mark = src._idx
         parse_word(unicode(style).lower(), src)
         # since parse_word returns the word just use the actual style itself (which is bool)
-        return (style,)
+        return (style, src[mark : src._idx])
 
 
 class StringParser(_ValueParser):
@@ -584,15 +585,17 @@ class NumDateParser(_ValueParser):
             self._parse_underscore(src, digits)
 
     def __parse__(self, _, src):
+        mark = src._idx
+
         sign = self._get_sign(src)
 
         # inf
         if self.float and src.current == "i":
-            return (float(sign + parse_word("inf", src)),)
+            return (float(sign + parse_word("inf", src)), src[mark : src._idx])
 
         # nan
         if self.float and src.current == "n":
-            return (float(sign + parse_word("nan", src)),)
+            return (float(sign + parse_word("nan", src)), src[mark : src._idx])
 
         # mark the start of the number
         mark = src.idx
@@ -602,11 +605,11 @@ class NumDateParser(_ValueParser):
 
         # datetime or date
         if (self.datetime or self.date) and not sign and src.current == "-":
-            return (self._parse_date(mark, src),)
+            return (self._parse_date(mark, src), src[mark : src._idx])
 
         # time
         if self.time and not sign and src.current == ":":
-            return (self._parse_time(mark, src),)
+            return (self._parse_time(mark, src), src[mark : src._idx])
 
         # _ allowed between digits
         if src.current == "_":
@@ -649,7 +652,10 @@ class NumDateParser(_ValueParser):
                 self._parse_underscore(src)
 
             if decimal or scientific:
-                return self._parse_float(sign, mark, src, scientific)
+                return (
+                    *self._parse_float(sign, mark, src, scientific),
+                    src[mark : src._idx],
+                )
 
         # integer
         if self.integer:
@@ -680,7 +686,7 @@ class NumDateParser(_ValueParser):
                     # consume as many valid characters as possible (at least one)
                     self._parse_underscore(src, chars.bin)
 
-            return self._parse_integer(sign, mark, src, base)
+            return (*self._parse_integer(sign, mark, src, base), src[mark : src._idx])
 
         raise src.parse_error(UnexpectedCharError(src.current))
 
