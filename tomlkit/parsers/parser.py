@@ -981,16 +981,13 @@ class ArrayParser(_ValuesParser):
             mark = src._idx
             src.consume(chars.ws)
             raw = src[mark : src._idx]
-            count = raw.count("\n")
+            count = raw.count("\n") - 1
+            if count > 0:
+                arr.comments.append(Newline(count))
 
             # skip additional parsing if we find a closing bracket
             if src.current == "]":
-                if count > 1:
-                    arr.comments.append(Newline(count))
                 break
-
-            if count > 0:
-                arr.comments.append(Newline(count))
 
             # comment
             if self.comment:
