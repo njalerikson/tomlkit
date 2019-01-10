@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from ._items import _Value
+from ._items import _Item, _Value
 from ._utils import pyobj
 
 
@@ -11,7 +11,7 @@ class Bool(_Value, int):
     def __new__(cls, value, _raw=None):  # type: (bool) -> None
         if isinstance(value, cls):
             return value
-        elif isinstance(value, bool):
+        elif not isinstance(value, _Item) and isinstance(value, bool):
             pass
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))

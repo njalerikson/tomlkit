@@ -2,7 +2,7 @@
 from enum import Enum
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string
-from ._items import _Value
+from ._items import _Item, _Value
 from ._utils import pyobj
 
 if PY2:
@@ -66,7 +66,7 @@ class String(_Value, unicode):
     ):  # type: (str, StringType, bool) -> String
         if isinstance(value, cls):
             return value
-        elif isinstance(value, (str, unicode)):
+        elif not isinstance(value, _Item) and isinstance(value, (str, unicode)):
             pass
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))

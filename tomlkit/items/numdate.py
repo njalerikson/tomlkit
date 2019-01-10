@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import datetime as dt
-from ._items import _Value
+from ._items import _Item, _Value
 from ._utils import pyobj
 
 
@@ -12,7 +12,7 @@ class DateTime(_Value, dt.datetime):
     def __new__(cls, value, _raw=None):  # type: (datetime) -> DateTime
         if isinstance(value, cls):
             return value
-        elif isinstance(value, dt.datetime):
+        elif not isinstance(value, _Item) and isinstance(value, dt.datetime):
             pass
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
@@ -138,7 +138,7 @@ class Date(_Value, dt.date):
     def __new__(cls, value, _raw=None):  # type: (date) -> Date
         if isinstance(value, cls):
             return value
-        elif isinstance(value, dt.date):
+        elif not isinstance(value, _Item) and isinstance(value, dt.date):
             pass
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
@@ -195,7 +195,7 @@ class Time(_Value, dt.time):
     def __new__(cls, value, _raw=None):  # type: (time) -> Time
         if isinstance(value, cls):
             return value
-        elif isinstance(value, dt.time):
+        elif not isinstance(value, _Item) and isinstance(value, dt.time):
             pass
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
@@ -309,10 +309,15 @@ class Integer(_Value, int):
     ):  # type: (int, bool) -> Integer
         if isinstance(value, cls):
             return value
-        elif isinstance(value, int):
+        elif not isinstance(value, _Item) and isinstance(value, int):
             _base = base or 10
             base = None
-        elif isinstance(value, str) and "." not in value and "e" not in value:
+        elif (
+            not isinstance(value, _Item)
+            and isinstance(value, str)
+            and "." not in value
+            and "e" not in value
+        ):
             _base = base or 10
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
@@ -386,12 +391,16 @@ class Float(_Value, float):
     ):  # type: (float, bool) -> Float
         if isinstance(value, cls):
             return value
-        elif isinstance(value, float):
+        elif not isinstance(value, _Item) and isinstance(value, float):
             pass
-        elif isinstance(value, str) and (
-            value.count(".") == 1
-            or value.count("e") == 1
-            or value.lower() in ["inf", "nan"]
+        elif (
+            not isinstance(value, _Item)
+            and isinstance(value, str)
+            and (
+                value.count(".") == 1
+                or value.count("e") == 1
+                or value.lower() in ["inf", "nan"]
+            )
         ):
             pass
         else:
