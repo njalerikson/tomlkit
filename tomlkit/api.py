@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
-from .items import toml, pyobj, flatten, dumps
+from .items import toml, pyobj, flatten, dumps, Newline as nl
 from .parsers import loads, parse
+
+
+__all__ = ["toml", "pyobj", "flatten", "parse", "loads", "dumps", "load", "dump", "nl"]
 
 
 # reads TOML document (str) from filehandle, uses loads

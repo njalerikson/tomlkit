@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 from collections.abc import MutableSequence, Sequence, Mapping
-from queue import LifoQueue
 from abc import ABCMeta
 from ..exceptions import MixedArrayTypesError
 from ._utils import pyobj, flatten
-from ._items import _Container, Comment, _Value
+from ._items import _Container, _Hidden, Comment, Newline, _Value
 from .key import Key, HiddenKey
 
 
@@ -24,7 +23,7 @@ class _Link(object):
 
     def __repr__(self):
         tmp = self.value if self.key is None else self.key
-        return "<{} {}>".format(self.__class__.__name__, tmp)
+        return "<{} {!r}>".format(self.__class__.__name__, tmp)
 
 
 class _Links(list):
@@ -91,23 +90,10 @@ class _Links(list):
         raise NotImplementedError("Cannot copy links")
 
 
-class _ScopeQueue(LifoQueue):
-    # custom LIFO queue
-    #   - maxsize=2
-    #   - first element inserted is never removed
-    def __init__(self):
-        super(_ScopeQueue, self).__init__(maxsize=2)
-
-    def _get(self):
-        # never remove the first element
-        if len(self.queue) == 1:
-            return self.queue[0]
-        return self.queue.pop()
-
-
 class Comments(list):
-    def __init__(self, links=None):
+    def __init__(self, links=None, nl=True):
         self._links = _Links() if links is None else links
+        self._nl = nl
 
     def __getitem__(self, index):
         if isinstance(index, slice):
@@ -126,7 +112,11 @@ class Comments(list):
         if link.key is not None:
             raise IndexError("Cannot set {}".format(index))
 
-        link.value = Comment(value)
+        if not self._nl and isinstance(value, Newline):
+            raise ValueError("Cannot set newlines")
+        elif not isinstance(value, _Hidden):
+            value = Comment(value)
+        link.value = value
 
     def __delitem__(self, index):
         link = self._links[index]
@@ -183,7 +173,11 @@ class Comments(list):
     def insert(self, index, value):
         link = _Link()
         link.key = None
-        link.value = Comment(value)
+        if not self._nl and isinstance(value, Newline):
+            raise ValueError("Cannot set newlines")
+        elif not isinstance(value, _Hidden):
+            value = Comment(value)
+        link.value = value
 
         self._links.insert(index, link)
 
@@ -231,9 +225,8 @@ class _Scalars(_Container, metaclass=_ScalarsMeta):
 
         self._value_map = {}
 
-        self._scopes = _ScopeQueue()
         self._links = _Links()
-        self._comments = Comments(self._links)
+        self._comments = Comments(links=self._links)
 
         return self, True
 
@@ -254,7 +247,7 @@ class Table(_Scalars, dict):
     def __new__(cls, value=None, parent=None, handle=None):
         self, new = super(Table, cls).__new__(cls, value, parent, handle)
 
-        self._head_comments = Comments()
+        self._head_comments = Comments(nl=False)
 
         if new and value:
             self.update(value)
@@ -875,13 +868,6 @@ class Array(_Scalars, list):
         # set link at index
         super(Array, self).insert(index, link)
 
-    def _check_scope(self, value, scope):
-        if scope != self.root and (self.complexity or value.complexity):
-            scope = self.root
-            value._scopes.put(scope)
-
-        return scope
-
     def _set_value(self, link, value, insert_link=lambda _: None):
         # if the value being set is already the value that was set then let it be
         try:
@@ -1052,14 +1038,14 @@ class Array(_Scalars, list):
         if self.complexity:
             return []
 
-        has_comments = any(v.comment for v in self)
+        has_comments = self.comments or any(v.comment for v in self)
         inline = not has_comments and len(self) <= self.__inline_count__
 
         simp = []
         for link in self._links:
             if link.key is None:
                 # this is a hidden link
-                simp.append(flatten(link.value))
+                simp.extend(link.value.__flatten__())
             else:
                 # this is a normal key-value link
 

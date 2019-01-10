@@ -14,7 +14,7 @@ from .._compat import timezone
 from .._compat import unicode
 from .._utils import _utc, chars
 
-from ..items import Comment
+from ..items import Comment, Newline
 from ..items import Key, KeyType
 from ..items import Bool
 from ..items import String, StringType
@@ -591,11 +591,21 @@ class NumDateParser(_ValueParser):
 
         # inf
         if self.float and src.current == "i":
-            return (float(sign + parse_word("inf", src)), src[mark : src._idx])
+            return (
+                float(sign + parse_word("inf", src)),
+                False,
+                10,
+                src[mark : src._idx],
+            )
 
         # nan
         if self.float and src.current == "n":
-            return (float(sign + parse_word("nan", src)), src[mark : src._idx])
+            return (
+                float(sign + parse_word("nan", src)),
+                False,
+                10,
+                src[mark : src._idx],
+            )
 
         # mark the start of the number
         mark = src.idx
@@ -873,13 +883,19 @@ class TableParser(_ItemParser):
             mark = src._idx
             src.consume(chars.ws)
             raw = src[mark : src._idx]
-            if "\n" in raw:
+            count = raw.count("\n")
+            if count > 0:
                 # got newlines
                 comment = 0
 
             # skip additional parsing if we find a closing bracket
             if src.current in "[\0":
+                if count > 1:
+                    tbl.comments.append(Newline(count - 1))
                 return comment
+
+            if count > 0:
+                tbl.comments.append(Newline(count))
 
             if self.comment:
                 try:
@@ -962,11 +978,19 @@ class ArrayParser(_ValuesParser):
         previous_is_value = False
         while src.current != "]":
             # leading indent
+            mark = src._idx
             src.consume(chars.ws)
+            raw = src[mark : src._idx]
+            count = raw.count("\n")
 
             # skip additional parsing if we find a closing bracket
             if src.current == "]":
+                if count > 1:
+                    arr.comments.append(Newline(count))
                 break
+
+            if count > 0:
+                arr.comments.append(Newline(count))
 
             # comment
             if self.comment:

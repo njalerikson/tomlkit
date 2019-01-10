@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 import datetime
 from textwrap import dedent
 
-from tomlkit import toml, flatten, loads
+from tomlkit import toml, flatten, loads, nl
 from tomlkit.items import String
 from tomlkit._utils import _utc
 
@@ -14,6 +14,7 @@ def test_build_example(example):
 
     doc = toml()
     doc.comments.append("This is a TOML document. Boom.")
+    doc.comments.append(nl())
     doc["title"] = "TOML Example"
 
     owner = doc.setdefault("owner", {})
@@ -52,6 +53,7 @@ def test_build_example(example):
     clients = doc.setdefault("clients", {})
     clients["data"] = [["gamma", "delta"], [1, 2]]
     clients["data"].comment = "just an update to make sure parsers support it"
+    clients.comments.append(nl())
     clients.comments.append("Line breaks are OK when inside arrays")
     clients["hosts"] = ["alpha", "omega"]
 

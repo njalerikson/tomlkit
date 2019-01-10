@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from ._items import _Item, _Key, _Trivia, _Value, _Container  # noqa: F401
-from ._items import Comment  # noqa: F401
+from ._items import Comment, Newline  # noqa: F401
 
 from .key import Key  # noqa: F401
 from .key import KeyType  # noqa: F401
@@ -15,7 +15,7 @@ from .container import Array, Table
 from ._utils import pyobj, flatten
 
 
-__all__ = ["toml", "pyobj", "flatten", "dumps", "parse"]
+__all__ = ["toml", "pyobj", "flatten", "dumps"]
 
 
 # link types together
