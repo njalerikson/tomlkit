@@ -609,7 +609,7 @@ def test_items_are_pickable():
     n = DateTime(datetime(2018, 10, 11, 12, 34, 56, 123456))
 
     s = pickle.dumps(n)
-    assert flatten(pickle.loads(s)) == "2018-10-11T12:34:56.123456"
+    assert flatten(pickle.loads(s)) == "2018-10-11 12:34:56.123456"
 
     n = Date(date(2018, 10, 11))
 
@@ -636,22 +636,27 @@ def test_items_are_pickable():
     )
 
     n = Table()
-    n["foo"] = "bar"
+    n["foo"] = {"bar": "baz"}
 
     s = pickle.dumps(n)
-    assert flatten(pickle.loads(s)) == '{foo = "bar"}'
+    assert flatten(pickle.loads(s)) == dedent(
+        """\
+        foo = {bar = "baz"}
+        """
+    )
 
     n = String("foo")
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == '"foo"'
 
-    n = Array([{"foo": "bar"}])
+    n = Table()
+    n["foo"] = [{"bar": "baz"}]
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == dedent(
         """\
-        foo = "bar"
+        foo = [{bar = "baz"}]
         """
     )
 

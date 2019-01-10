@@ -18,11 +18,9 @@ class _Item:
         raise NotImplementedError(self.__class__)
 
     def __reduce__(self):
-        print(self.__class__, "reduce")
         return self.__reduce_ex__(2)
 
     def __reduce_ex__(self, protocol):
-        print(self.__class__, "reduce_ex")
         return self.__class__, self._getstate(protocol)
 
 

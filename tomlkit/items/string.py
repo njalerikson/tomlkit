@@ -71,12 +71,13 @@ class String(_Value, unicode):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        try:
-            t = StringType(t)
-        except ValueError:
-            t = StringType.lookup(t)
-
-        print(value, t, multi, _raw)
+        if t is None:
+            t = StringType.BASIC
+        else:
+            try:
+                t = StringType(t)
+            except ValueError:
+                t = StringType.lookup(t)
 
         self = super(String, cls).__new__(cls, value)
         self._t = t
@@ -114,6 +115,4 @@ class String(_Value, unicode):
         return unicode(self)
 
     def _getstate(self, protocol=3):
-        tmp = (pyobj(self, hidden=True), self._t.value, self._multi, self._raw)
-        print(*tmp)
-        return tmp
+        return (pyobj(self, hidden=True), self._t.value, self._multi, self._raw)
