@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import datetime as dt
 from ._items import _Value
+from ._utils import pyobj
 
 
 class DateTime(_Value, dt.datetime):
@@ -37,7 +38,7 @@ class DateTime(_Value, dt.datetime):
 
         return [self.isoformat(sep=" ")]
 
-    def __pyobj__(self):  # type: () -> datetime
+    def __pyobj__(self, hidden=False):  # type: (bool) -> datetime
         return dt.datetime(
             self.year,
             self.month,
@@ -125,6 +126,9 @@ class DateTime(_Value, dt.datetime):
             )
         )
 
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True), self._raw)
+
 
 class Date(_Value, dt.date):
     """
@@ -151,7 +155,7 @@ class Date(_Value, dt.date):
 
         return [self.isoformat()]
 
-    def __pyobj__(self):  # type: () -> date
+    def __pyobj__(self, hidden=False):  # type: (bool) -> date
         return dt.date(self.year, self.month, self.day)
 
     @classmethod
@@ -178,6 +182,9 @@ class Date(_Value, dt.date):
         if day is None:
             day = self.day
         return self.__class__(dt.date(year, month, day))
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True), self._raw)
 
 
 class Time(_Value, dt.time):
@@ -211,7 +218,7 @@ class Time(_Value, dt.time):
 
         return [self.isoformat()]
 
-    def __pyobj__(self):  # type: () -> time
+    def __pyobj__(self, hidden=False):  # type: (bool) -> time
         return dt.time(
             self.hour,
             self.minute,
@@ -250,6 +257,9 @@ class Time(_Value, dt.time):
         return self.__class__(
             dt.time(hour, minute, second, microsecond, tzinfo, fold=fold)
         )
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True), self._raw)
 
 
 _integerfmt = {
@@ -330,8 +340,11 @@ class Integer(_Value, int):
     def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, str(self))
 
-    def __pyobj__(self):  # type: () -> datetime
+    def __pyobj__(self, hidden=False):  # type: (bool) -> int
         return int(self)
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True), self.ksep, self.base, self._raw)
 
 
 _floatfmt = {False: ("{:f}", "{:,f}"), True: ("{:e}", "{:,e}")}
@@ -404,5 +417,8 @@ class Float(_Value, float):
     def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, str(self))
 
-    def __pyobj__(self):  # type: () -> datetime
+    def __pyobj__(self, hidden=False):  # type: (bool) -> float
         return float(self)
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True), self.ksep, self.scientific, self._raw)

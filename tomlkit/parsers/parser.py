@@ -99,12 +99,7 @@ class KeyParser(_Parser):
     __klass__ = Key
 
     def __check__(self, src):
-        if src.current in chars.bare:
-            return KeyType.BARE
-        elif src.current == KeyType.BASIC.open:
-            return KeyType.BASIC
-        elif src.current == KeyType.LITERAL.open:
-            return KeyType.LITERAL
+        return KeyType.lookup(src.current)
 
     def __parse__(self, style, src):
         if style.is_bare():
@@ -284,10 +279,7 @@ class StringParser(_ValueParser):
     multi = property(**multi())
 
     def __check__(self, src):  # type: (Source) -> StringType
-        if src.current == StringType.BASIC.open:
-            return StringType.BASIC
-        elif src.current == StringType.LITERAL.open:
-            return StringType.LITERAL
+        return StringType.lookup(src.current)
 
     def __parse__(self, style, src):
         return parse_string(style, src, self.multi)

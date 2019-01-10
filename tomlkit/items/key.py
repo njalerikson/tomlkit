@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
-
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string, chars
 from ._items import _Key
+from ._utils import pyobj
 
 if PY2:
     from functools32 import lru_cache
@@ -53,6 +53,16 @@ class KeyType(Enum):
     def is_literal(self):  # type: () -> bool
         return self is KeyType.LITERAL
 
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def lookup(t):  # type: () -> bool
+        if t in chars.bare:
+            return KeyType.BARE
+        elif t == KeyType.BASIC.open:
+            return KeyType.BASIC
+        elif t == KeyType.LITERAL.open:
+            return KeyType.LITERAL
+
 
 class Key(_Key, unicode):
     __slots__ = ["_t"]
@@ -64,11 +74,23 @@ class Key(_Key, unicode):
         value = unicode(value)
         if any(c not in chars.bare for c in value):
             # something in key is non-bare char
-            t = KeyType(KeyType.BASIC if t is None else t)
+            if t is None:
+                t = KeyType.BASIC
+            else:
+                try:
+                    t = KeyType(t)
+                except ValueError:
+                    t = KeyType.lookup(t)
             assert t != KeyType.BARE
         else:
             # entire key is composed of bare chars
-            t = KeyType(KeyType.BARE if t is None else t)
+            if t is None:
+                t = KeyType.BARE
+            else:
+                try:
+                    t = KeyType(t)
+                except ValueError:
+                    t = KeyType.lookup(t)
 
         self = super(Key, cls).__new__(cls, value)
         self._t = t
@@ -89,8 +111,11 @@ class Key(_Key, unicode):
     def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, self.__flatten__()[0])
 
-    def __pyobj__(self):  # type: () -> str
-        return super(Key, self).__str__()
+    def __pyobj__(self, hidden=False):  # type: (bool) -> str
+        return unicode(self)
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True), self._t.value)
 
 
 HIDDEN_INDEX = -1
@@ -113,3 +138,6 @@ class HiddenKey(Key):
     def __repr__(self):  # type: () -> str
         txt = super(Key, self).__str__()
         return "<{} {}>".format(self.__class__.__name__, txt)
+
+    def _getstate(self, protocol=3):
+        return ()

@@ -434,18 +434,33 @@ class Table(_Scalars, dict):
             super(Table, self).__setitem__(link.key[-1], link)
 
     def _set_value(self, link, value, insert_link=lambda _: None):
-        if isinstance(value, Mapping):
+        scalar = None
+        if isinstance(value, tuple):
+            scalar, value = value
+
+        if scalar is Table or isinstance(value, Mapping):
             insert_link(True)
             value = Table(value=value, parent=self, handle=link)
-        elif isinstance(value, Sequence) and not isinstance(value, (str, tuple)):
+        elif scalar is Array or (
+            isinstance(value, Sequence) and not isinstance(value, (str, tuple))
+        ):
             insert_link(True)
             value = Array(value=value, parent=self, handle=link)
+        elif scalar:
+            if not issubclass(scalar, _Value):
+                raise TypeError(
+                    "Cannot convert {} to valid types ({})".format(
+                        value, ", ".join(scalar.__name__ for scalar in self._scalars)
+                    )
+                )
+
+            insert_link(False)
+            value = scalar(value)
         else:
             insert_link(False)
-            args = value if isinstance(value, tuple) else (value,)
             for scalar in self._scalars:
                 try:
-                    value = scalar(*args)
+                    value = scalar(value)
                     break
                 except TypeError:
                     pass
@@ -693,8 +708,28 @@ class Table(_Scalars, dict):
     def __repr__(self):
         return "{" + ", ".join("{!r}: {!r}".format(*kv) for kv in self.items()) + "}"
 
-    def __pyobj__(self):  # type: () -> dict
+    def __pyobj__(self, hidden=False):  # type: (bool) -> dict
+        if hidden:
+            is_root = self.root is self
+            prelen = len(self._handle.key)
+            tmp = []
+            for link in self._links:
+                if link.key is None:
+                    key = None
+                    value = link.value
+                else:
+                    if is_root and link.scope is not self:
+                        continue
+                    key = link.key[prelen:]
+                    value = link.value._value_map[link]
+                    if isinstance(value, _Container):
+                        value = pyobj(value, hidden=True)
+                tmp.append((key, value))
+            return (Table, tmp)
         return {key.__pyobj__(): value.__pyobj__() for key, value in self.items()}
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True)[1],)
 
 
 class Array(_Scalars, list):
@@ -837,8 +872,9 @@ class Array(_Scalars, list):
                 container = self.__getitem__(index, infer=infer)
                 return container.__setitem__(rindex, value, infer=infer)
 
-        if infer and not isinstance(index, int):
-            rindex = (index, *rindex)
+        if (infer and not isinstance(index, int)) or isinstance(index, HiddenKey):
+            if not isinstance(index, HiddenKey):
+                rindex = (index, *rindex)
             index = -1
             container = self.__getitem__(index, infer=infer)
             return container.__setitem__(rindex, value, infer=infer)
@@ -869,29 +905,33 @@ class Array(_Scalars, list):
         super(Array, self).insert(index, link)
 
     def _set_value(self, link, value, insert_link=lambda _: None):
-        # if the value being set is already the value that was set then let it be
-        try:
-            if self._value_map[link] is value:
-                return
-        except KeyError:
-            pass
+        scalar = None
+        if isinstance(value, tuple):
+            scalar, value = value
 
-        if isinstance(value, Mapping) and self.type in (None, Table):
+        if scalar is Table or (
+            isinstance(value, Mapping) and self.type in (None, Table)
+        ):
             insert_link(True)
             value = Table(value=value, parent=self, handle=link)
-        elif (
+        elif scalar is Array or (
             isinstance(value, Sequence)
             and not isinstance(value, (str, tuple))
             and self.type in (None, Array)
         ):
             insert_link(True)
             value = Array(value=value, parent=self, handle=link)
+        elif scalar:
+            if self.type and scalar is not self.type:
+                raise MixedArrayTypesError
+
+            insert_link(False)
+            value = scalar(value)
         else:
             insert_link(False)
-            args = value if isinstance(value, tuple) else (value,)
             for scalar in self._scalars:
                 try:
-                    value = scalar(*args)
+                    value = scalar(value)
                     break
                 except TypeError:
                     pass
@@ -962,7 +1002,7 @@ class Array(_Scalars, list):
                         i += 1
             else:
                 for value in arg:
-                    if isinstance(value, Comments):
+                    if isinstance(value, _Hidden):
                         self._comments.append(value)
                     else:
                         self.append(value)
@@ -1070,5 +1110,22 @@ class Array(_Scalars, list):
     def __repr__(self):
         return "[" + ", ".join(repr(v) for v in self) + "]"
 
-    def __pyobj__(self):  # type: () -> datetime
+    def __pyobj__(self, hidden=False):  # type: (bool) -> list
+        if hidden:
+            is_root = self.root is self
+            tmp = []
+            for link in self._links:
+                if link.key is None:
+                    value = link.value
+                else:
+                    if is_root and link.scope is not self:
+                        continue
+                    value = link.value._value_map[link]
+                    if isinstance(value, _Container):
+                        value = pyobj(value, hidden=True)
+                tmp.append(value)
+            return (Array, tmp)
         return [value.__pyobj__() for value in self]
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True)[1],)

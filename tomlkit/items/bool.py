@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from ._items import _Value
+from ._utils import pyobj
 
 
 class Bool(_Value, int):
@@ -28,5 +29,8 @@ class Bool(_Value, int):
     def __str__(self):  # type: () -> str
         return "true" if self else "false"
 
-    def __pyobj__(self):  # type: () -> str
+    def __pyobj__(self, hidden=False):  # type: (bool) -> bool
         return bool(self)
+
+    def _getstate(self, protocol=3):
+        return (pyobj(self, hidden=True), self._raw)

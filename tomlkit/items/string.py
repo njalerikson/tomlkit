@@ -3,6 +3,7 @@ from enum import Enum
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string
 from ._items import _Value
+from ._utils import pyobj
 
 if PY2:
     from functools32 import lru_cache
@@ -46,6 +47,14 @@ class StringType(Enum):
     def is_literal(self):  # type: () -> bool
         return self is StringType.LITERAL
 
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def lookup(t):  # type: () -> bool
+        if t == StringType.BASIC.open:
+            return StringType.BASIC
+        elif t == StringType.LITERAL.open:
+            return StringType.LITERAL
+
 
 class String(_Value, unicode):
     """
@@ -62,9 +71,12 @@ class String(_Value, unicode):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        # only escape newline chars if this is not a multi line string
-        # value = escape_string(value)
-        t = StringType(StringType.BASIC if t is None else t)
+        try:
+            t = StringType(t)
+        except ValueError:
+            t = StringType.lookup(t)
+
+        print(value, t, multi, _raw)
 
         self = super(String, cls).__new__(cls, value)
         self._t = t
@@ -98,5 +110,10 @@ class String(_Value, unicode):
     def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, self.__flatten__()[0])
 
-    def __pyobj__(self):  # type: () -> str
-        return super(String, self).__str__()
+    def __pyobj__(self, hidden=False):  # type: (bool) -> str
+        return unicode(self)
+
+    def _getstate(self, protocol=3):
+        tmp = (pyobj(self, hidden=True), self._t.value, self._multi, self._raw)
+        print(*tmp)
+        return tmp

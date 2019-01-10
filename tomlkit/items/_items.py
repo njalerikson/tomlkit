@@ -4,24 +4,26 @@ from .._compat import unicode
 
 class _Item:
     def __flatten__(self):  # type: () -> str
-        raise NotImplementedError
+        raise NotImplementedError(self.__class__)
 
     def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, self)
 
-    def __pyobj__(self):
-        raise NotImplementedError
+    def __pyobj__(self, hidden=False):
+        raise NotImplementedError(self.__class__)
 
     # Pickling methods
 
-    # def _getstate(self, protocol=3):
-    #     raise NotImplementedError()
+    def _getstate(self, protocol=3):
+        raise NotImplementedError(self.__class__)
 
-    # def __reduce__(self):
-    #     return self.__reduce_ex__(2)
+    def __reduce__(self):
+        print(self.__class__, "reduce")
+        return self.__reduce_ex__(2)
 
-    # def __reduce_ex__(self, protocol):
-    #     return self.__class__, self._getstate(protocol)
+    def __reduce_ex__(self, protocol):
+        print(self.__class__, "reduce_ex")
+        return self.__class__, self._getstate(protocol)
 
 
 class _Key(_Item):
@@ -71,6 +73,11 @@ class Comment(_Hidden, unicode):
     def __bool__(self):
         return self._bool
 
+    def _getstate(self, protocol=3):
+        if not self:
+            return (None,)
+        return (unicode(self),)
+
 
 blank = Comment(None)
 
@@ -94,6 +101,9 @@ class Newline(_Hidden, unicode):
 
     def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, self._count)
+
+    def _getstate(self, protocol=3):
+        return (self._count,)
 
 
 class _Trivia(_Item):

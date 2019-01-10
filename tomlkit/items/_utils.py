@@ -7,5 +7,5 @@ def flatten(data):
 
 
 # converts TOML object into Python object
-def pyobj(data):
-    return data.__pyobj__()
+def pyobj(data, **kwargs):
+    return data.__pyobj__(**kwargs)
