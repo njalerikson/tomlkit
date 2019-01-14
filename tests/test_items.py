@@ -276,7 +276,7 @@ def test_dicts_with_sub_dicts_are_properly_converted():
 
     assert flatten(doc) == dedent(
         """\
-        foo = {bar = {string = "baz"}, int = 34, float = 3.140000}
+        foo = {bar = {string = "baz"}, int = 34, float = 3.14}
         """
     )
 
@@ -287,7 +287,7 @@ def test_dicts_with_sub_dicts_are_properly_converted():
         [foo]
         bar = {string = "baz"}
         int = 34
-        float = 3.140000
+        float = 3.14
         """
     )
 
@@ -297,7 +297,7 @@ def test_dicts_with_sub_dicts_are_properly_converted():
         """\
         [foo]
         int = 34
-        float = 3.140000
+        float = 3.14
 
         [foo.bar]
         string = "baz"
@@ -397,7 +397,7 @@ def test_floats_behave_like_floats():
 
     assert flatten(doc) == dedent(
         """\
-        f = 34.120000
+        f = 34.12
         """
     )
 
@@ -405,7 +405,7 @@ def test_floats_behave_like_floats():
     assert doc["f"] == 35.12
     assert flatten(doc) == dedent(
         """\
-        f = 35.120000
+        f = 35.12
         """
     )
 
@@ -413,7 +413,7 @@ def test_floats_behave_like_floats():
     assert doc["f"] == 33.12
     assert flatten(doc) == dedent(
         """\
-        f = 33.120000
+        f = 33.12
         """
     )
 
@@ -599,7 +599,7 @@ def test_items_are_pickable():
     n = Float(12.34)
 
     s = pickle.dumps(n)
-    assert flatten(pickle.loads(s)) == "12.340000"
+    assert flatten(pickle.loads(s)) == "12.34"
 
     n = Bool(True)
 

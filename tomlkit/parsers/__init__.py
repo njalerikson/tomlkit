@@ -36,16 +36,15 @@ inlinetable = InlineTableParser()
 inlinetable.key = keys
 inlinetable.inline_comment = False
 inlinetable.comment = False
-
 table = TableParser()
 table.tablekey = tablekeys
 table.key = keys
 table.inline_comment = inline_comment
 table.comment = comment
 
-array.values = [boolean, string, numdate, array, inlinetable]
-inlinetable.values = [boolean, string, numdate, array, inlinetable]
-table.values = [boolean, string, numdate, array, inlinetable]
+array.values = (boolean, string, numdate, array, inlinetable)
+inlinetable.values = (boolean, string, numdate, array, inlinetable)
+table.values = (boolean, string, numdate, array, inlinetable)
 
 
 # converts TOML document (str) into TOML object

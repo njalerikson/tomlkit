@@ -2,8 +2,8 @@
 from enum import Enum
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string, chars
-from ._items import _Key
-from ._utils import pyobj
+from ._items import _Item
+from ._key import _Key
 
 if PY2:
     from functools32 import lru_cache
@@ -64,58 +64,68 @@ class KeyType(Enum):
             return KeyType.LITERAL
 
 
-class Key(_Key, unicode):
-    __slots__ = ["_t"]
+def check_t(value, t):
+    if any(c not in chars.bare for c in value):
+        # something in key is non-bare char
+        if t is None:
+            return KeyType.BASIC
 
-    def __new__(cls, value, t=None):  # type: (str, KeyType) -> None
+        try:
+            t = KeyType(t)
+        except ValueError:
+            t = KeyType.lookup(t)
+
+        assert t != KeyType.BARE
+        return t
+    else:
+        # entire key is composed of bare chars
+        if t is None:
+            return KeyType.BARE
+
+        try:
+            return KeyType(t)
+        except ValueError:
+            return KeyType.lookup(t)
+
+
+def check_raw(value, t, raw):
+    if raw is not None:
+        return raw
+
+    if t is KeyType.BASIC:
+        # escape_string decodes
+        txt = escape_string(value, nl=True)
+    else:
+        txt = decode(value)
+    return "{}{}{}".format(t.open, txt, t.close)
+
+
+class Key(_Key, unicode):
+    __slots__ = ["_t", "_raw"]
+
+    def __new__(cls, value, t=None, _raw=None):  # type: (str, KeyType, str) -> Key
         if isinstance(value, cls):
             return value
-
-        value = unicode(value)
-        if any(c not in chars.bare for c in value):
-            # something in key is non-bare char
-            if t is None:
-                t = KeyType.BASIC
-            else:
-                try:
-                    t = KeyType(t)
-                except ValueError:
-                    t = KeyType.lookup(t)
-            assert t != KeyType.BARE
+        elif not isinstance(value, _Item) and isinstance(value, (str, unicode)):
+            pass
         else:
-            # entire key is composed of bare chars
-            if t is None:
-                t = KeyType.BARE
-            else:
-                try:
-                    t = KeyType(t)
-                except ValueError:
-                    t = KeyType.lookup(t)
+            raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
         self = super(Key, cls).__new__(cls, value)
-        self._t = t
+        self._t = t = check_t(self, t)
+        self._raw = _raw = check_raw(self, t, _raw)
         return self
 
-    def __flatten__(self):  # type: () -> str
-        # if BASIC we need to escape all characters
+    def __init__(self, value, t=None, _raw=None):  # type: (str, KeyType, str) -> None
+        pass
 
-        txt = super(Key, self).__str__()
-        if self._t is KeyType.BASIC:
-            # escape_string decodes
-            txt = escape_string(txt, nl=True)
-        else:
-            txt = decode(txt)
-
-        return ["{}{}{}".format(self._t.open, txt, self._t.close)]
-
-    def __repr__(self):  # type: () -> str
-        return "<{} {}>".format(self.__class__.__name__, self.__flatten__()[0])
-
-    def __pyobj__(self, hidden=False):  # type: (bool) -> str
+    def __pyobj__(self):  # type: () -> str
         return unicode(self)
 
+    __hiddenobj__ = __pyobj__
+
     def _getstate(self, protocol=3):
-        return (pyobj(self, hidden=True), self._t.value)
+        return (self.__hiddenobj__(), self._t, self._raw)
 
 
 HIDDEN_INDEX = -1
@@ -127,17 +137,21 @@ HIDDEN_INDEX = -1
 class HiddenKey(Key):
     __slots__ = []  # must include __slots__ otherwise we become __dict__
 
-    def __new__(cls):  # type: () -> None
+    def __new__(cls):  # type: () -> HiddenKey
         global HIDDEN_INDEX
         HIDDEN_INDEX += 1
-        return super(HiddenKey, cls).__new__(cls, HIDDEN_INDEX, KeyType.BARE)
+        return super(HiddenKey, cls).__new__(cls, unicode(HIDDEN_INDEX), KeyType.BARE)
+
+    def __init__(self):  # type: () -> None
+        pass
 
     def __flatten__(self):  # type: () -> str
         return []
 
-    def __repr__(self):  # type: () -> str
-        txt = super(Key, self).__str__()
-        return "<{} {}>".format(self.__class__.__name__, txt)
+    def __pyobj__(self):  # type: () -> str
+        raise NotImplementedError(self.__class__)
+
+    __hiddenobj__ = __pyobj__
 
     def _getstate(self, protocol=3):
         return ()

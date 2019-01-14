@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
-from ._items import _Item, _Value
-from ._utils import pyobj
+from ._items import _Item
+from ._trivia import _Value
+
+
+def check_raw(value, raw):
+    if raw is not None:
+        return raw
+
+    return "true" if value else "false"
 
 
 class Bool(_Value, int):
-    """
-    A boolean literal.
-    """
-
-    def __new__(cls, value, _raw=None):  # type: (bool) -> None
+    def __new__(cls, value, _raw=None):  # type: (bool, str) -> Bool
         if isinstance(value, cls):
             return value
         elif not isinstance(value, _Item) and isinstance(value, bool):
@@ -17,20 +20,16 @@ class Bool(_Value, int):
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
         self = super(Bool, cls).__new__(cls, value)
-        self._raw = _raw
+        self._raw = _raw = check_raw(self, _raw)
         return self
 
-    def __flatten__(self):  # type: () -> str
-        if self._raw:
-            return [self._raw]
-
-        return [str(self)]
+    def __init__(self, value, _raw=None):  # type: (bool, str) -> None
+        pass
 
     def __str__(self):  # type: () -> str
-        return "true" if self else "false"
+        return self._raw
 
-    def __pyobj__(self, hidden=False):  # type: (bool) -> bool
+    def __pyobj__(self):  # type: () -> bool
         return bool(self)
 
-    def _getstate(self, protocol=3):
-        return (pyobj(self, hidden=True), self._raw)
+    __hiddenobj__ = __pyobj__

@@ -71,7 +71,7 @@ class _StateHandler:
 
 
 class Source(unicode):
-    __slots__ = ["_chars", "_idx", "_marker", "_current", "_state"]
+    __slots__ = ["_chars", "_idx", "_marker", "_current", "_state", "_line", "_col"]
     EOF = "\0"
 
     def __new__(cls, value):
@@ -85,9 +85,10 @@ class Source(unicode):
         # Collection of Chars
         self._chars = iter([(i, c) for i, c in enumerate(self)])
 
-        # set by self.inc()
-        # self._idx = ???
-        # self._current = ???
+        self._current = ""
+        self._idx = 0
+        self._line = 1
+        self._col = 0
 
         # set by self.mark()
         # self._marker = ???
@@ -125,15 +126,19 @@ class Source(unicode):
         Returns whether or not it was able to advance.
         """
         try:
+            prev_newline = self._current is "\n"
             self._idx, self._current = next(self._chars)
+            self._line += prev_newline
+            self._col = prev_newline or self._col + 1
 
             return True
         except StopIteration:
             self._idx = len(self)
             self._current = self.EOF
-            if exception:
-                raise self.parse_error(exception)
+            self._col += 1
 
+            if exception:
+                raise self.parse_error(exception, self._current)
             return False
 
     def inc_n(self, n, exception=None):  # type: (int, Exception) -> bool
@@ -189,13 +194,13 @@ class Source(unicode):
         """
         self._marker = self._idx
 
-    def parse_error(self, exception=UnexpectedCharError, *args):
+    def parse_error(self, exception=True, *args):
         """
         Creates a generic "parse error" at the current position.
         """
-        line, col = self._to_linecol()
-
         # de-construct exception
+        if isinstance(exception, bool):
+            exception = UnexpectedCharError
         if not isinstance(exception, Exception):
             exception = exception(*args)
         args = exception.args
@@ -209,14 +214,4 @@ class Source(unicode):
         _.__module__ = exception.__module__
         _.__doc__ = exception.__doc__
 
-        return _(line, col, *args)
-
-    def _to_linecol(self):  # type: () -> Tuple[int, int]
-        cur = 0
-        for i, line in enumerate(self.splitlines()):
-            if cur + len(line) + 1 > self.idx:
-                return (i + 1, self.idx - cur)
-
-            cur += len(line) + 1
-
-        return len(self.splitlines()), 0
+        return _(self._line, self._col, self._idx, *args)

@@ -6,12 +6,12 @@ class ParseErrorMixin:
     """
 
     def __init__(
-        self, line, col, message=None
+        self, line, col, idx, message=None
     ):  # type: (int, int, Optional[str]) -> None
         if message is None:
             message = "parse error"
 
-        message = "{} at line {} col {}".format(message, line, col)
+        message = "{} (line {} column {} char {})".format(message, line, col, idx)
 
         if isinstance(self, _ParseError):
             return super(ParseErrorMixin, self).__init__(message=message)

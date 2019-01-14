@@ -2,8 +2,8 @@
 from enum import Enum
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string
-from ._items import _Item, _Value
-from ._utils import pyobj
+from ._items import _Item
+from ._trivia import _Value
 
 if PY2:
     from functools32 import lru_cache
@@ -56,14 +56,43 @@ class StringType(Enum):
             return StringType.LITERAL
 
 
+def check_t(t):
+    if t is None:
+        return StringType.BASIC
+
+    try:
+        return StringType(t)
+    except ValueError:
+        return StringType.lookup(t)
+
+
+def check_multi(value, multi):
+    if multi is not None:
+        return bool(multi)
+
+    return "\n" in value
+
+
+def check_raw(value, t, multi, raw):
+    if raw is not None:
+        return raw
+
+    count = 3 if multi else 1
+
+    if t is StringType.BASIC:
+        # escape_string decodes
+        txt = escape_string(value, nl=not multi)
+    else:
+        txt = decode(value)
+    return "{}{}{}".format(t.open * count, txt, t.close * count)
+
+
 class String(_Value, unicode):
-    """
-    A string literal.
-    """
+    __slots__ = ["_t", "_multi", "_raw"]
 
     def __new__(
         cls, value, t=None, multi=None, _raw=None
-    ):  # type: (str, StringType, bool) -> String
+    ):  # type: (str, StringType, bool, str) -> String
         if isinstance(value, cls):
             return value
         elif not isinstance(value, _Item) and isinstance(value, (str, unicode)):
@@ -71,48 +100,21 @@ class String(_Value, unicode):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        if t is None:
-            t = StringType.BASIC
-        else:
-            try:
-                t = StringType(t)
-            except ValueError:
-                t = StringType.lookup(t)
-
         self = super(String, cls).__new__(cls, value)
-        self._t = t
-        self._multi = ("\n" in self) if multi is None else bool(multi)
-        self._raw = _raw
+        self._t = t = check_t(t)
+        self._multi = multi = check_multi(self, multi)
+        self._raw = _raw = check_raw(self, t, multi, _raw)
         return self
 
     def __init__(
         self, value, t=None, multi=None, _raw=None
-    ):  # type: (str, StringType, bool) -> None
-        super(String, self).__init__()
+    ):  # type: (str, StringType, bool, str) -> None
+        pass
 
-    def __flatten__(self):  # type: () -> str
-        if self._raw:
-            return [self._raw]
-
-        count = 3 if self._multi else 1
-
-        # if BASIC and multiline we need to escape non-newline characters
-        # if BASIC and singleline we need to escape all characters
-
-        txt = super(String, self).__str__()
-        if self._t is StringType.BASIC:
-            # escape_string decodes
-            txt = escape_string(txt, nl=not self._multi)
-        else:
-            txt = decode(txt)
-
-        return ["{}{}{}".format(self._t.open * count, txt, self._t.close * count)]
-
-    def __repr__(self):  # type: () -> str
-        return "<{} {}>".format(self.__class__.__name__, self.__flatten__()[0])
-
-    def __pyobj__(self, hidden=False):  # type: (bool) -> str
+    def __pyobj__(self):  # type: () -> str
         return unicode(self)
 
+    __hiddenobj__ = __pyobj__
+
     def _getstate(self, protocol=3):
-        return (pyobj(self, hidden=True), self._t.value, self._multi, self._raw)
+        return (self.__hiddenobj__(), self._t, self._multi, self._raw)

@@ -3,7 +3,8 @@ from collections.abc import MutableSequence, Sequence, Mapping
 from abc import ABCMeta
 from ..exceptions import MixedArrayTypesError
 from ._utils import pyobj, flatten
-from ._items import _Container, _Hidden, Comment, Newline, _Value
+from ._hidden import _Hidden, Comment, Newline
+from ._trivia import _Value, _Container
 from .key import Key, HiddenKey
 
 
@@ -22,11 +23,21 @@ class _Link(object):
         raise TypeError("unhashable type: '{}'".format(self.__class__.__name__))
 
     def __repr__(self):
-        tmp = self.value if self.key is None else self.key
+        try:
+            if self.key is not None:
+                tmp = self.key
+        except AttributeError:
+            try:
+                tmp = self.value
+            except AttributeError:
+                tmp = "missing key/value"
+
         return "<{} {!r}>".format(self.__class__.__name__, tmp)
 
 
 class _Links(list):
+    __slots__ = ["_map"]
+
     def __init__(self):
         self._map = {}
 
@@ -67,11 +78,8 @@ class _Links(list):
         return item in self._map
 
     def clear(self):
-        try:
-            while True:
-                self.pop()
-        except (KeyError, IndexError):
-            pass
+        while self:
+            self.pop()
 
     append = MutableSequence.append
     reverse = MutableSequence.reverse
@@ -91,13 +99,15 @@ class _Links(list):
 
 
 class Comments(list):
+    __slots__ = ["_links", "_nl"]
+
     def __init__(self, links=None, nl=True):
         self._links = _Links() if links is None else links
-        self._nl = nl
+        self._nl = bool(nl)
 
     def __getitem__(self, index):
         if isinstance(index, slice):
-            return [self[i] for i in range(index.start, index.stop, index.step)]
+            raise ValueError("comment slicing not allowed")
 
         link = self._links[index]
 
@@ -107,6 +117,9 @@ class Comments(list):
         return link.value
 
     def __setitem__(self, index, value):
+        if isinstance(index, slice):
+            raise ValueError("comment slicing not allowed")
+
         link = self._links[index]
 
         if link.key is not None:
@@ -119,10 +132,13 @@ class Comments(list):
         link.value = value
 
     def __delitem__(self, index):
+        if isinstance(index, slice):
+            raise ValueError("comment slicing not allowed")
+
         link = self._links[index]
 
         if link.key is not None:
-            raise IndexError("Cannot delete {}".format(index))
+            raise IndexError("Cannot delete {} (not a comment value)".format(index))
 
         del self._links[index]
 
@@ -476,9 +492,7 @@ class Table(_Scalars, dict):
         self._value_map[link] = value
 
     def _add_link(self, link, value, scope):
-        def insert_link(is_container):
-            nonlocal scope
-
+        def insert_link(scope, is_container):
             # this is every item's "original" inline scope
             scope = self if scope is None else scope
             link.scope = scope
@@ -491,7 +505,9 @@ class Table(_Scalars, dict):
             if is_container and scope is not self.root:
                 self.root._links.append(link)
 
-        self._set_value(link, value, insert_link)
+        self._set_value(
+            link, value, lambda is_container: insert_link(scope, is_container)
+        )
 
     def update(self, *args, **kwargs):
         if len(args) > 1:
@@ -925,6 +941,13 @@ class Array(_Scalars, list):
             if self.type and scalar is not self.type:
                 raise MixedArrayTypesError
 
+            if not issubclass(scalar, _Value):
+                raise TypeError(
+                    "Cannot convert {} to valid types ({})".format(
+                        value, ", ".join(scalar.__name__ for scalar in self._scalars)
+                    )
+                )
+
             insert_link(False)
             value = scalar(value)
         else:
@@ -938,6 +961,13 @@ class Array(_Scalars, list):
 
             if self.type and not isinstance(value, self.type):
                 raise MixedArrayTypesError
+
+            if not issubclass(scalar, _Value):
+                raise TypeError(
+                    "Cannot convert {} to valid types ({})".format(
+                        value, ", ".join(scalar.__name__ for scalar in self._scalars)
+                    )
+                )
 
         # set value at link
         self._value_map[link] = value

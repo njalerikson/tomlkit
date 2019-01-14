@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from collections.abc import Mapping
 import datetime as dt
-from re import compile as r, VERBOSE
 
 from ..source import Source
 from ..exceptions import (
@@ -415,7 +414,7 @@ class NumDateParser(_ValueParser):
         else:
             raise src.parse_error(UnexpectedCharError(src.current))
 
-        value = self._parse_time(mark, src)
+        value, _ = self._parse_time(mark, src)
         hour = value.hour
         minute = value.minute
         second = value.second
@@ -429,8 +428,9 @@ class NumDateParser(_ValueParser):
         elif src.current in "+-":
             tzinfo = {"tzinfo": self._parse_offset(src)}
 
-        return dt.datetime(
-            year, month, day, hour, minute, second, microsecond, **tzinfo
+        return (
+            dt.datetime(year, month, day, hour, minute, second, microsecond, **tzinfo),
+            src[mark : src._idx],
         )
 
     def _parse_date(self, mark, src):
@@ -475,7 +475,7 @@ class NumDateParser(_ValueParser):
                 return self._parse_datetime(year, month, day, src)
 
         if self.date:
-            return dt.date(year, month, day)
+            return dt.date(year, month, day), src[mark : src._idx]
 
         raise src.parse_error(UnexpectedCharError(src.current))
 
@@ -522,50 +522,25 @@ class NumDateParser(_ValueParser):
             src.consume(chars.digits, min=1, max=6)
             microsecond = int("{:<06s}".format(src[_mark : src.idx]))
 
-        return dt.time(hour, minute, second, microsecond)
-
-    _RE_UNDERSCORE = r(
-        r"""
-        (?<=
-            [{digits}]
-        )
-        _
-        (?=
-            [{digits}]
-        )
-        """.format(
-            digits=chars.digits
-        ),
-        flags=VERBOSE,
-    )
+        return dt.time(hour, minute, second, microsecond), src[mark : src._idx]
 
     def _parse_integer(self, sign, mark, src, base):
         # get the raw number
         raw = src[mark : src.idx]
 
-        # underscores must be surrounded by digits so only replace those,
-        # the rest will remain and cause failures
-        # (Python doesn't like _ in integers/floats)
-        clean = self._RE_UNDERSCORE.sub("", raw)
-
         # use thousands separator
-        ksep = clean != raw
+        ksep = "_" in raw
 
-        return int(sign + clean, base), ksep, base
+        return int(sign + raw, base), ksep, base, raw
 
     def _parse_float(self, sign, mark, src, scientific):
         # get the raw number
         raw = src[mark : src.idx]
 
-        # underscores must be surrounded by digits so only replace those,
-        # the rest will remain and cause failures
-        # (Python doesn't like _ in integers/floats)
-        clean = self._RE_UNDERSCORE.sub("", raw)
-
         # use thousands separator
-        ksep = clean != raw
+        ksep = "_" in raw
 
-        return float(sign + clean), ksep, scientific
+        return float(sign + raw), ksep, scientific, raw
 
     def _parse_underscore(self, src, digits=chars.digits):
         src.consume(digits, min=1)
@@ -607,11 +582,11 @@ class NumDateParser(_ValueParser):
 
         # datetime or date
         if (self.datetime or self.date) and not sign and src.current == "-":
-            return (self._parse_date(mark, src), src[mark : src._idx])
+            return self._parse_date(mark, src)
 
         # time
         if self.time and not sign and src.current == ":":
-            return (self._parse_time(mark, src), src[mark : src._idx])
+            return self._parse_time(mark, src)
 
         # _ allowed between digits
         if src.current == "_":
@@ -654,10 +629,7 @@ class NumDateParser(_ValueParser):
                 self._parse_underscore(src)
 
             if decimal or scientific:
-                return (
-                    *self._parse_float(sign, mark, src, scientific),
-                    src[mark : src._idx],
-                )
+                return self._parse_float(sign, mark, src, scientific)
 
         # integer
         if self.integer:
@@ -688,7 +660,7 @@ class NumDateParser(_ValueParser):
                     # consume as many valid characters as possible (at least one)
                     self._parse_underscore(src, chars.bin)
 
-            return (*self._parse_integer(sign, mark, src, base), src[mark : src._idx])
+            return self._parse_integer(sign, mark, src, base)
 
         raise src.parse_error(UnexpectedCharError(src.current))
 
@@ -722,7 +694,7 @@ class _ValuesParser(_ContainerParser):
             return self._values
 
         def fset(self, values):
-            values = list(values)
+            values = tuple(values)
             if any(not isinstance(v, _Parser) for v in values):
                 raise TypeError("values must be a list of _Parser")
             self._values = values

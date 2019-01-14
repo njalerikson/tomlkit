@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-from ._items import _Item, _Key, _Trivia, _Value, _Container  # noqa: F401
-from ._items import Comment, Newline  # noqa: F401
+from ._items import _Item
+from ._key import _Key  # noqa: F401
+from ._hidden import Comment, Newline  # noqa: F401
+from ._trivia import _Trivia, _Value, _Container  # noqa: F401
 
 from .key import Key  # noqa: F401
 from .key import KeyType  # noqa: F401
@@ -8,7 +10,11 @@ from .key import KeyType  # noqa: F401
 from .bool import Bool
 from .string import String
 from .string import StringType  # noqa: F401
-from .numdate import DateTime, Date, Time, Integer, Float
+from .date import Date
+from .time import Time
+from .datetime import DateTime
+from .integer import Integer
+from .float import Float
 
 from .container import Array, Table
 
