@@ -45,6 +45,9 @@ class Comment(_Hidden, unicode):
     def __bool__(self):
         return self._bool
 
+    def __repr__(self):  # type: () -> str
+        return "<{} {}>".format(self.__class__.__name__, self)
+
     def _getstate(self, protocol=3):
         if not self:
             return (None,)

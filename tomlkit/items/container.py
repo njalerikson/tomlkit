@@ -26,7 +26,9 @@ class _Link(object):
         try:
             if self.key is not None:
                 tmp = self.key
-        except AttributeError:
+            else:
+                raise ValueError
+        except (AttributeError, ValueError):
             try:
                 tmp = self.value
             except AttributeError:
@@ -154,9 +156,6 @@ class Comments(list):
             if link.key is None:
                 yield link.value
 
-    def __str__(self):
-        raise NotImplementedError("Cannot convert to string")
-
     def __repr__(self):
         return "{{{}}}".format(
             ", ".join(
@@ -165,6 +164,8 @@ class Comments(list):
                 if link.key is None
             )
         )
+
+    __str__ = __repr__
 
     def pop(self, index=None):
         if len(self) == 0:

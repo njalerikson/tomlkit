@@ -907,8 +907,22 @@ class TableParser(_ItemParser):
             try:
                 if comment:
                     tbl.comment = comment
-                for _ in range(prev_comment):
-                    tbl.head_comments.insert(0, prev.comments.pop())
+                if prev_comment:
+                    # there were comments that were directly touching this table's
+                    # header, move those comments into this table' header comments
+                    for _ in range(prev_comment):
+                        tbl.head_comments.insert(0, prev.comments.pop())
+                    # if there happens to be a white space between the prior table's
+                    # last value and the header comments then delete that as we auto
+                    # handle those newlines
+                    try:
+                        # if this is the very first table (so prev == inst) then we need
+                        # to check the -2 index as -1 is already this new table
+                        i = -2 if prev is inst else -1
+                        if isinstance(prev.comments[i], Newline):
+                            del prev.comments[i]
+                    except IndexError:
+                        pass
                 tbl.complexity = True
                 if hasattr(tbl, "_explicit"):
                     # this exact table key was provided earlier
