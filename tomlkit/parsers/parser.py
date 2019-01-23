@@ -229,9 +229,9 @@ class CommentParser(_Parser):
             return True
 
     def __parse__(self, _, src):
-        src.inc(exception=True)  # consume comment hash
-
         mark = src._idx
+
+        src.inc(exception=True)  # consume comment hash
 
         # consume everything until we find newline/EOF
         while src.current not in chars.nl and src.inc():

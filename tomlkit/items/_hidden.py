@@ -19,9 +19,8 @@ class Comment(_Hidden, unicode):
             # strip leading/trailing spaces
             comment = comment.strip()
 
-            # string leading comment hash/spaces
-            comment = comment.lstrip("#")
-            comment = comment.lstrip()
+            if not comment.startswith("#"):
+                comment = "# " + comment
         else:
             comment = ""
 
@@ -35,12 +34,12 @@ class Comment(_Hidden, unicode):
 
     def apply(self, other):  # type: (str) -> str
         if self:
-            return other + "  # " + self
+            return other + self
         return other
 
     def __flatten__(self):
         if self:
-            return ["# " + self]
+            return [unicode(self)]
         return []
 
     def __bool__(self):
