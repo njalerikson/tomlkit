@@ -447,24 +447,37 @@ class TableFactory:
 
             explicit = property(**explicit())
 
-            def __getitem__(self, key, infer=False):
+            def _getitem(self, key, **kwargs):
                 rkey = ()
                 if isinstance(key, tuple):
                     key, *rkey = key
                     rkey = tuple(rkey)
 
-                link = super(Table, self).__getitem__(key)
+                try:
+                    link = super(Table, self).__getitem__(key)
+                except KeyError:
+                    if "default" in kwargs:
+                        return (None,), kwargs["default"]
+                    raise
+
                 value = self._value_map[link]
 
                 if rkey:
-                    return value.__getitem__(rkey, infer=infer)
-                return value
+                    rkey, value = value._getitem(rkey, **kwargs)
+                    return (link.key[-1], *rkey), value
+                return (link.key[-1],), value
+
+            def __getitem__(self, key, infer=False):
+                return self._getitem(key, infer=infer)[1]
+
+            def getitem(self, key, default=None, infer=False):
+                key, value = self._getitem(key, default=default, infer=infer)
+                if len(key) > 1:
+                    return key, value
+                return key[0], value
 
             def get(self, key, default=None, infer=False):
-                try:
-                    return self.__getitem__(key, infer=infer)
-                except KeyError:
-                    return default
+                return self._getitem(key, default=default, infer=infer)[1]
 
             def setdefault(self, key, value, infer=False):
                 try:

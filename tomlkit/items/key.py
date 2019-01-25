@@ -56,6 +56,7 @@ class KeyType(Enum):
     @staticmethod
     @lru_cache(maxsize=None)
     def lookup(t):  # type: () -> bool
+        # we will receive a single char to lookup, cannot match with KeyType.BARE.open
         if t in chars.bare:
             return KeyType.BARE
         elif t == KeyType.BASIC.open:
