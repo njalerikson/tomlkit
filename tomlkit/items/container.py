@@ -217,7 +217,10 @@ class _KVSMMeta(_TriviaMeta):
 
     def values():
         def fget(self):
-            return self._values
+            try:
+                return self._values
+            except AttributeError:
+                return ()
 
         def fset(self, value):
             value = tuple(value)
@@ -233,7 +236,10 @@ class _KVSMMeta(_TriviaMeta):
 
     def sequence():
         def fget(self):
-            return self._sequence
+            try:
+                return self._sequence
+            except AttributeError:
+                return None
 
         def fset(self, value):
             if not (issubclass(value, _Container) and issubclass(value, Sequence)):
@@ -248,7 +254,10 @@ class _KVSMMeta(_TriviaMeta):
 
     def mapping():
         def fget(self):
-            return self._mapping
+            try:
+                return self._mapping
+            except AttributeError:
+                return None
 
         def fset(self, value):
             if not (issubclass(value, _Container) and issubclass(value, Mapping)):
@@ -527,15 +536,24 @@ class TableFactory:
                     type, value = value
 
                 # process value as mapping if the type is mapping OR the value is a Mapping
-                if type is self.__class__.mapping or isinstance(value, Mapping):
+                if (
+                    self.__class__.mapping
+                    and type is self.__class__.mapping
+                    or isinstance(value, Mapping)
+                ):
                     insert_link(True)
                     value = self.__class__.mapping(
                         value=value, parent=self, handle=link
                     )
 
                 # process value as sequence if the type is sequence OR the value is a Sequence
-                elif type is self.__class__.sequence or (
-                    isinstance(value, Sequence) and not isinstance(value, (str, tuple))
+                elif (
+                    self.__class__.sequence
+                    and type is self.__class__.sequence
+                    or (
+                        isinstance(value, Sequence)
+                        and not isinstance(value, (str, tuple))
+                    )
                 ):
                     insert_link(True)
                     value = self.__class__.sequence(
@@ -1026,9 +1044,13 @@ class ArrayFactory:
                     type, value = value
 
                 # process value as mapping if the type is mapping OR the value is a Mapping
-                if type is self.__class__.mapping or (
-                    isinstance(value, Mapping)
-                    and self.type in (None, self.__class__.mapping)
+                if (
+                    self.__class__.mapping
+                    and type is self.__class__.mapping
+                    or (
+                        isinstance(value, Mapping)
+                        and self.type in (None, self.__class__.mapping)
+                    )
                 ):
                     insert_link(True)
                     value = self.__class__.mapping(
@@ -1036,10 +1058,14 @@ class ArrayFactory:
                     )
 
                 # process value as sequence if the type is sequence OR the value is a Sequence
-                elif type is self.__class__.sequence or (
-                    isinstance(value, Sequence)
-                    and not isinstance(value, (str, tuple))
-                    and self.type in (None, self.__class__.sequence)
+                elif (
+                    self.__class__.sequence
+                    and type is self.__class__.sequence
+                    or (
+                        isinstance(value, Sequence)
+                        and not isinstance(value, (str, tuple))
+                        and self.type in (None, self.__class__.sequence)
+                    )
                 ):
                     insert_link(True)
                     value = self.__class__.sequence(
