@@ -2,7 +2,7 @@
 from enum import Enum
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string
-from ._items import _Item
+from ._item import _Item
 from ._trivia import _Value
 
 if PY2:

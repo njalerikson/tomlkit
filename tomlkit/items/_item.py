@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 class _Item:
-    def __flatten__(self):  # type: () -> str
+    def __flatten__(self):  # type: () -> list
         return [self._raw]
 
     def __repr__(self):  # type: () -> str
         return "<{} {}>".format(self.__class__.__name__, self._raw)
 
-    def __pyobj__(self, hidden=False):
+    def __pyobj__(self):
         raise NotImplementedError(self.__class__)
 
     __hiddenobj__ = __pyobj__

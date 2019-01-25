@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from .items import toml, pyobj, flatten, dumps, Newline as nl
+from .items import toml, pyobj, flatten, dumps, nl
 from .parsers import loads, parse
 
 

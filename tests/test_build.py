@@ -4,8 +4,7 @@ from __future__ import unicode_literals
 import datetime
 from textwrap import dedent
 
-from tomlkit import toml, flatten, loads, nl
-from tomlkit.items import String
+from tomlkit import toml, flatten, loads, items
 from tomlkit._utils import _utc
 
 
@@ -14,13 +13,13 @@ def test_build_example(example):
 
     doc = toml()
     doc.comments.append("This is a TOML document. Boom.")
-    doc.comments.append(nl())
+    doc.comments.append(items.nl())
     doc["title"] = "TOML Example"
 
     owner = doc.setdefault("owner", {})
     owner["name"] = "Tom Preston-Werner"
     owner["organization"] = "GitHub"
-    owner["bio"] = String(
+    owner["bio"] = items.string(
         "GitHub Cofounder & CEO\nLikes tater tots and beer.", multi=False
     )
     owner["dob"] = datetime.datetime(1979, 5, 27, 7, 32, tzinfo=_utc)
@@ -53,7 +52,7 @@ def test_build_example(example):
     clients = doc.setdefault("clients", {})
     clients["data"] = [["gamma", "delta"], [1, 2]]
     clients["data"].comment = "just an update to make sure parsers support it"
-    clients.comments.append(nl())
+    clients.comments.append(items.nl())
     clients.comments.append("Line breaks are OK when inside arrays")
     clients["hosts"] = ["alpha", "omega"]
 

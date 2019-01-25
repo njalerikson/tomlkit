@@ -2,8 +2,9 @@
 from .parser import _Parser
 from .parser import KeyParser, ItemKeysParser, TableKeysParser
 from .parser import CommentParser
-from .parser import BoolParser, StringParser, NumDateParser
+from .parser import BooleanParser, StringParser, NumDateParser
 from .parser import ArrayParser, InlineTableParser, TableParser
+from .. import items
 
 
 __all__ = ["loads", "parse"]
@@ -20,8 +21,8 @@ tablekeys = TableKeysParser()
 tablekeys.key = key
 tablekeys.inline_comment = inline_comment
 
-boolean = BoolParser()
-string = StringParser()
+bool = boolean = BooleanParser()
+str = string = StringParser()
 string.multi = True
 numdate = NumDateParser()
 numdate.datetime = True
@@ -29,22 +30,34 @@ numdate.date = True
 numdate.time = True
 numdate.integer = True
 numdate.float = True
+
 array = ArrayParser()
+inlinetable = InlineTableParser()
+table = TableParser()
+
+array.__klass__ = items.array
 array.inline_comment = inline_comment
 array.comment = comment
-inlinetable = InlineTableParser()
-inlinetable.key = keys
+array.values = (boolean, string, numdate)
+array.mapping = inlinetable
+array.sequence = array
+
+inlinetable.__klass__ = items.table
 inlinetable.inline_comment = False
 inlinetable.comment = False
-table = TableParser()
-table.tablekey = tablekeys
-table.key = keys
+inlinetable.key = keys
+inlinetable.values = (boolean, string, numdate)
+inlinetable.mapping = inlinetable
+inlinetable.sequence = array
+
+table.__klass__ = items.table
 table.inline_comment = inline_comment
 table.comment = comment
-
-array.values = (boolean, string, numdate, array, inlinetable)
-inlinetable.values = (boolean, string, numdate, array, inlinetable)
-table.values = (boolean, string, numdate, array, inlinetable)
+table.key = keys
+table.tablekey = tablekeys
+table.values = (boolean, string, numdate)
+table.mapping = inlinetable
+table.sequence = array
 
 
 # converts TOML document (str) into TOML object

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from ._items import _Item
+from ._item import _Item
 from ._trivia import _Value
 
 
@@ -10,7 +10,7 @@ def check_raw(value, raw):
     return "true" if value else "false"
 
 
-class Bool(_Value, int):
+class Boolean(_Value, int):
     def __new__(cls, value, _raw=None):  # type: (bool, str) -> Bool
         if isinstance(value, cls):
             return value
@@ -19,7 +19,7 @@ class Bool(_Value, int):
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
-        self = super(Bool, cls).__new__(cls, value)
+        self = super(Boolean, cls).__new__(cls, value)
         self._raw = _raw = check_raw(self, _raw)
         return self
 

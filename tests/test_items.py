@@ -17,20 +17,16 @@ from tomlkit._compat import PY2
 
 # from tomlkit.exceptions import NonExistentKey
 # from tomlkit.items import InlineTable
-from tomlkit.items import Key, KeyType
-from tomlkit.items import Bool
-from tomlkit.items import String, StringType
-from tomlkit.items import DateTime, Date, Time, Integer, Float
-from tomlkit.items import Table, Array
+from tomlkit import items
 
 # from tomlkit.items import item
 # from tomlkit.parser import Parser
 
 
 def test_key_comparison():
-    k = Key("foo")
+    k = items.key("foo")
 
-    assert k == Key("foo")
+    assert k == items.key("foo")
     assert k == "foo"
     assert k != "bar"
     assert k != 5
@@ -42,11 +38,11 @@ def test_items_can_be_appended_to_and_removed_from_a_table():
     doc = loads(content)
     table = doc["table"]
 
-    assert isinstance(table, Table)
+    assert isinstance(table, items.table)
     assert table.complexity is True
     assert flatten(table) == ""
 
-    table["foo"] = String("bar", StringType.BASIC)
+    table["foo"] = items.string("bar", items.StringType.BASIC)
 
     assert flatten(table) == dedent(
         """\
@@ -94,11 +90,11 @@ def test_items_can_be_appended_to_and_removed_from_an_inline_table():
     doc = loads(content)
     table = doc["table"]
 
-    assert isinstance(table, Table)
+    assert isinstance(table, items.table)
     assert table.complexity is False
     assert flatten(table) == "{}"
 
-    table["foo"] = String("bar", StringType.BASIC)
+    table["foo"] = items.string("bar", items.StringType.BASIC)
 
     assert flatten(table) == '{foo = "bar"}'
 
@@ -157,13 +153,13 @@ def test_hex_octal_and_bin_integers_are_supported(example):
 
 
 def test_key_automatically_sets_proper_string_type_if_not_bare():
-    key = Key("foo.bar")
+    key = items.key("foo.bar")
 
-    assert key._t == KeyType.BASIC
+    assert key._t == items.KeyType.BASIC
 
 
 def test_array_behaves_like_a_list():
-    doc = toml([1, 2], base=Array)
+    doc = toml([1, 2], base=items.array)
 
     assert doc == [1, 2]
     assert flatten(doc) == "[1, 2]"
@@ -329,24 +325,24 @@ def test_integers_behave_like_ints():
 
     i = doc["i"]
     assert i == 34
-    assert isinstance(i, int) and isinstance(i, Integer)
+    assert isinstance(i, int) and isinstance(i, items.integer)
 
     ii = i + 1
     assert ii == 35
-    assert isinstance(ii, int) and not isinstance(ii, Integer)
+    assert isinstance(ii, int) and not isinstance(ii, items.integer)
 
     i += 1
     assert i == 35
-    assert isinstance(i, int) and not isinstance(i, Integer)
+    assert isinstance(i, int) and not isinstance(i, items.integer)
 
     i = doc["i"]
     ii = i - 1
     assert ii == 33
-    assert isinstance(ii, int) and not isinstance(ii, Integer)
+    assert isinstance(ii, int) and not isinstance(ii, items.integer)
 
     i -= 1
     assert i == 33
-    assert isinstance(i, int) and not isinstance(i, Integer)
+    assert isinstance(i, int) and not isinstance(i, items.integer)
 
     assert flatten(doc) == dedent(
         """\
@@ -376,24 +372,24 @@ def test_floats_behave_like_floats():
 
     f = doc["f"]
     assert f == 34.12
-    assert isinstance(f, float) and isinstance(f, Float)
+    assert isinstance(f, float) and isinstance(f, items.float)
 
     ff = f + 1
     assert ff == 35.12
-    assert isinstance(ff, float) and not isinstance(ff, Float)
+    assert isinstance(ff, float) and not isinstance(ff, items.float)
 
     f += 1
     assert f == 35.12
-    assert isinstance(f, float) and not isinstance(f, Float)
+    assert isinstance(f, float) and not isinstance(f, items.float)
 
     f = doc["f"]
     ff = f - 1
     assert ff == 33.12
-    assert isinstance(ff, float) and not isinstance(ff, Float)
+    assert isinstance(ff, float) and not isinstance(ff, items.float)
 
     f -= 1
     assert f == 33.12
-    assert isinstance(f, float) and not isinstance(f, Float)
+    assert isinstance(f, float) and not isinstance(f, items.float)
 
     assert flatten(doc) == dedent(
         """\
@@ -423,23 +419,23 @@ def test_datetimes_behave_like_datetimes():
 
     d = doc["dt"]
     assert d == datetime(2018, 7, 22, 12, 34, 56)
-    assert isinstance(d, datetime) and isinstance(d, DateTime)
+    assert isinstance(d, datetime) and isinstance(d, items.datetime)
 
     dd = d + timedelta(days=1)
     assert dd == datetime(2018, 7, 23, 12, 34, 56)
-    assert isinstance(dd, datetime) and not isinstance(dd, DateTime)
+    assert isinstance(dd, datetime) and not isinstance(dd, items.datetime)
 
     d += timedelta(days=1)
     assert d == datetime(2018, 7, 23, 12, 34, 56)
-    assert isinstance(d, datetime) and not isinstance(d, DateTime)
+    assert isinstance(d, datetime) and not isinstance(d, items.datetime)
 
     dd = d - timedelta(days=2)
     assert dd == datetime(2018, 7, 21, 12, 34, 56)
-    assert isinstance(dd, datetime) and not isinstance(dd, DateTime)
+    assert isinstance(dd, datetime) and not isinstance(dd, items.datetime)
 
     d -= timedelta(days=2)
     assert d == datetime(2018, 7, 21, 12, 34, 56)
-    assert isinstance(d, datetime) and not isinstance(d, DateTime)
+    assert isinstance(d, datetime) and not isinstance(d, items.datetime)
 
     assert flatten(doc) == dedent(
         """\
@@ -469,23 +465,23 @@ def test_dates_behave_like_dates():
 
     d = doc["d"]
     assert d == date(2018, 7, 22)
-    assert isinstance(d, date) and isinstance(d, Date)
+    assert isinstance(d, date) and isinstance(d, items.date)
 
     dd = d + timedelta(days=1)
     assert dd == date(2018, 7, 23)
-    assert isinstance(dd, date) and not isinstance(dd, Date)
+    assert isinstance(dd, date) and not isinstance(dd, items.date)
 
     d += timedelta(days=1)
     assert d == date(2018, 7, 23)
-    assert isinstance(d, date) and not isinstance(d, Date)
+    assert isinstance(d, date) and not isinstance(d, items.date)
 
     dd = d - timedelta(days=2)
     assert dd == date(2018, 7, 21)
-    assert isinstance(dd, date) and not isinstance(dd, Date)
+    assert isinstance(dd, date) and not isinstance(dd, items.date)
 
     d -= timedelta(days=2)
     assert d == date(2018, 7, 21)
-    assert isinstance(d, date) and not isinstance(d, Date)
+    assert isinstance(d, date) and not isinstance(d, items.date)
 
     assert flatten(doc) == dedent(
         """\
@@ -529,15 +525,15 @@ def test_strings_behave_like_strs():
 
     s = doc["s"]
     assert s == "foo"
-    assert isinstance(s, str) and isinstance(s, String)
+    assert isinstance(s, str) and isinstance(s, items.string)
 
     ss = s + " bar"
     assert ss == "foo bar"
-    assert isinstance(ss, str) and not isinstance(ss, String)
+    assert isinstance(ss, str) and not isinstance(ss, items.string)
 
     s += " bar"
     assert s == "foo bar"
-    assert isinstance(s, str) and not isinstance(s, String)
+    assert isinstance(s, str) and not isinstance(s, items.string)
 
     assert flatten(doc) == dedent(
         """\
@@ -591,42 +587,42 @@ def test_tables_behave_like_dicts():
 
 
 def test_items_are_pickable():
-    n = Integer(12)
+    n = items.integer(12)
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == "12"
 
-    n = Float(12.34)
+    n = items.float(12.34)
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == "12.34"
 
-    n = Bool(True)
+    n = items.boolean(True)
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == "true"
 
-    n = DateTime(datetime(2018, 10, 11, 12, 34, 56, 123456))
+    n = items.datetime(datetime(2018, 10, 11, 12, 34, 56, 123456))
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == "2018-10-11 12:34:56.123456"
 
-    n = Date(date(2018, 10, 11))
+    n = items.date(date(2018, 10, 11))
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == "2018-10-11"
 
-    n = Time(time(12, 34, 56, 123456))
+    n = items.time(time(12, 34, 56, 123456))
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == "12:34:56.123456"
 
-    n = Array([1, 2, 3])
+    n = items.array([1, 2, 3])
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == "[1, 2, 3]"
 
-    n = Table({"foo": "bar"})
+    n = items.table({"foo": "bar"})
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == dedent(
@@ -635,7 +631,7 @@ def test_items_are_pickable():
         """
     )
 
-    n = Table()
+    n = items.table()
     n["foo"] = {"bar": "baz"}
 
     s = pickle.dumps(n)
@@ -645,12 +641,12 @@ def test_items_are_pickable():
         """
     )
 
-    n = String("foo")
+    n = items.string("foo")
 
     s = pickle.dumps(n)
     assert flatten(pickle.loads(s)) == '"foo"'
 
-    n = Table()
+    n = items.table()
     n["foo"] = [{"bar": "baz"}]
 
     s = pickle.dumps(n)

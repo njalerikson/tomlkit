@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from .._compat import unicode
-from ._items import _Item
+from ._item import _Item
 
 
 class _Hidden(_Item):
@@ -30,14 +30,14 @@ class Comment(_Hidden, unicode):
         return self
 
     def __init__(self, comment):  # type: (str) -> None
-        return super(Comment, self).__init__()
+        super(Comment, self).__init__()
 
     def apply(self, other):  # type: (str) -> str
         if self:
-            return other + self
+            return other + "  " + self
         return other
 
-    def __flatten__(self):
+    def __flatten__(self):  # type: () -> list
         if self:
             return [unicode(self)]
         return []
@@ -71,7 +71,7 @@ class Newline(_Hidden, unicode):
     def __init__(self, ws=1):  # type: (str) -> None
         return super(Newline, self).__init__()
 
-    def __flatten__(self):
+    def __flatten__(self):  # type: () -> list
         return [""] * self._count
 
     def __repr__(self):  # type: () -> str

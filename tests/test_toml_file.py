@@ -2,7 +2,7 @@ import io
 import os
 
 from tomlkit import load, dump
-from tomlkit.items import Table
+from tomlkit import items
 
 
 def test_toml_file(example):
@@ -12,7 +12,7 @@ def test_toml_file(example):
     with open(toml_file) as fh:
         content = load(fh)
 
-    assert isinstance(content, Table)
+    assert isinstance(content, items.table)
     assert content["owner"]["organization"] == "GitHub"
 
     with open(toml_file, "w") as fh:

@@ -1,11 +1,26 @@
 # -*- coding: utf-8 -*-
-from ._items import _Item
+from ._item import _Item
 from ._hidden import Comment, blank
 
 
-class _Trivia(_Item):
+class _TriviaMeta(type):
     def comment():
-        def fget(self):  # type: () -> Comment
+        def fget(self):
+            return self._comment
+
+        def fset(self, value):
+            if issubclass(value, Comment):
+                raise TypeError("comment must be a _Comment")
+            self._comment = value
+
+        return locals()
+
+    comment = property(**comment())
+
+
+class _Trivia(_Item, metaclass=_TriviaMeta):
+    def comment():
+        def fget(self):  # type: () -> _Comment
             try:
                 return self._comment
             except AttributeError:

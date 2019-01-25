@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import datetime as dt
-from ._items import _Item
+from ._item import _Item
 from ._trivia import _Value
 from .date import Date
 from .time import Time

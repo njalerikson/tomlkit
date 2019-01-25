@@ -12,14 +12,11 @@ from ..exceptions import (
 from .._compat import timezone
 from .._compat import unicode
 from .._utils import _utc, chars
-
 from ..items import Comment, Newline
 from ..items import Key, KeyType
-from ..items import Bool
+from ..items import Boolean
 from ..items import String, StringType
 from ..items import DateTime, Date, Time, Integer, Float
-from ..items import Array, Table
-
 from ._utils import parse_word, parse_string
 
 
@@ -245,9 +242,9 @@ class CommentParser(_Parser):
         return (value,)
 
 
-class BoolParser(_ValueParser):
+class BooleanParser(_ValueParser):
     __slots__ = []  # must include __slots__ otherwise we become __dict__
-    __klass__ = Bool
+    __klass__ = Boolean
 
     def __check__(self, src):  # type: (Source) -> bool
         if src.current == "t":
@@ -687,21 +684,49 @@ class NumDateParser(_ValueParser):
 
 
 class _ValuesParser(_ContainerParser):
-    __slots__ = ["_values", "_inline_comment", "_comment"]
+    __slots__ = ["_values", "_sequence", "_mapping", "_inline_comment", "_comment"]
 
     def values():
         def fget(self):
             return self._values
 
-        def fset(self, values):
-            values = tuple(values)
-            if any(not isinstance(v, _Parser) for v in values):
-                raise TypeError("values must be a list of _Parser")
-            self._values = values
+        def fset(self, value):
+            value = tuple(value)
+            if any(not isinstance(v, _Parser) for v in value):
+                raise TypeError(
+                    "values must be a list of _Parser, got {!r}".format(value)
+                )
+            self._values = value
 
         return locals()
 
     values = property(**values())
+
+    def mapping():
+        def fget(self):
+            return self._mapping
+
+        def fset(self, value):
+            if not isinstance(value, _Parser):
+                raise TypeError("mapping must be a _Parser, got {!r}".format(value))
+            self._mapping = value
+
+        return locals()
+
+    mapping = property(**mapping())
+
+    def sequence():
+        def fget(self):
+            return self._sequence
+
+        def fset(self, value):
+            if not isinstance(value, _Parser):
+                raise TypeError("sequence must be a _Parser, got {!r}".format(value))
+            self._sequence = value
+
+        return locals()
+
+    sequence = property(**sequence())
 
     def inline_comment():
         def fget(self):
@@ -709,7 +734,11 @@ class _ValuesParser(_ContainerParser):
 
         def fset(self, inline_comment):
             if not isinstance(inline_comment, _Parser) and inline_comment is not False:
-                raise TypeError("inline_comment must be a _Parser or False")
+                raise TypeError(
+                    "inline_comment must be a _Parser or False, got {!r}".format(
+                        inline_comment
+                    )
+                )
             self._inline_comment = inline_comment
 
         return locals()
@@ -722,7 +751,9 @@ class _ValuesParser(_ContainerParser):
 
         def fset(self, comment):
             if not isinstance(comment, _Parser) and comment is not False:
-                raise TypeError("comment must be a _Parser or False")
+                raise TypeError(
+                    "comment must be a _Parser or False, got {!r}".format(comment)
+                )
             self._comment = comment
 
         return locals()
@@ -730,7 +761,7 @@ class _ValuesParser(_ContainerParser):
     comment = property(**comment())
 
     def __inst__(self, src, parent=None, key=None):
-        for parser in self.values:
+        for parser in (*self.values, self.mapping, self.sequence):
             check = parser.__check__(src)
             if check is None:
                 continue
@@ -781,8 +812,8 @@ class _ItemParser(_ValuesParser):
 
 
 class InlineTableParser(_ItemParser):
-    __slots__ = []  # must include __slots__ otherwise we become __dict__
-    __klass__ = Table
+    __slots__ = ["__klass__"]  # must include __slots__ otherwise we become __dict__
+    # __klass__ = None  # Table
 
     def __check__(self, src):
         if src.current == "{":
@@ -792,7 +823,7 @@ class InlineTableParser(_ItemParser):
         src.inc(exception=True)  # consume opening bracket
 
         if parent is None or key is None:
-            tbl = Table()
+            tbl = self.__klass__()
         else:
             tbl = self.__assign__(parent, key, {})
         tbl.explicit = True
@@ -821,8 +852,8 @@ class InlineTableParser(_ItemParser):
 
 
 class TableParser(_ItemParser):
-    __slots__ = ["_tablekey"]
-    __klass__ = Table
+    __slots__ = ["_tablekey", "__klass__"]
+    # __klass__ = None  # Table
 
     def tablekey():
         def fget(self):
@@ -939,8 +970,8 @@ class TableParser(_ItemParser):
 
 
 class ArrayParser(_ValuesParser):
-    __slots__ = []  # must include __slots__ otherwise we become __dict__
-    __klass__ = Array
+    __slots__ = ["__klass__"]  # must include __slots__ otherwise we become __dict__
+    # __klass__ = None  # Array
 
     def __check__(self, src):
         if src.current == "[":
@@ -950,7 +981,7 @@ class ArrayParser(_ValuesParser):
         src.inc(exception=True)  # consume opening bracket
 
         if parent is None or key is None:
-            arr = Array()
+            arr = self.__klass__()
         else:
             arr = self.__assign__(parent, key, [])
         previous_is_value = False

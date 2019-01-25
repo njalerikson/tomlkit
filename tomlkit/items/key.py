@@ -2,7 +2,7 @@
 from enum import Enum
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string, chars
-from ._items import _Item
+from ._item import _Item
 from ._key import _Key
 
 if PY2:
@@ -134,24 +134,20 @@ HIDDEN_INDEX = -1
 # special Key for Array indices, this is a key necessary for the purpose of lookups
 # and otherwise handling our values but we do not actually care what this value is
 # (it just needs to be unique), nor do we care to see it
-class HiddenKey(Key):
-    __slots__ = []  # must include __slots__ otherwise we become __dict__
+class HiddenKey(_Key, unicode):
+    __slots__ = ["_raw"]
 
     def __new__(cls):  # type: () -> HiddenKey
         global HIDDEN_INDEX
         HIDDEN_INDEX += 1
-        return super(HiddenKey, cls).__new__(cls, unicode(HIDDEN_INDEX), KeyType.BARE)
+        _raw = unicode(HIDDEN_INDEX)
 
-    def __init__(self):  # type: () -> None
-        pass
+        self = super(HiddenKey, cls).__new__(cls, _raw)
+        self._raw = _raw
+        return self
 
-    def __flatten__(self):  # type: () -> str
+    def __flatten__(self):  # type: () -> list
         return []
-
-    def __pyobj__(self):  # type: () -> str
-        raise NotImplementedError(self.__class__)
-
-    __hiddenobj__ = __pyobj__
 
     def _getstate(self, protocol=3):
         return ()

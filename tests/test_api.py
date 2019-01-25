@@ -11,15 +11,7 @@ from tomlkit import parsers
 from tomlkit.exceptions import MixedArrayTypesError
 from tomlkit.exceptions import UnexpectedCharError
 from tomlkit.exceptions import InvalidCharInStringError
-from tomlkit.items import Array
-from tomlkit.items import Bool
-from tomlkit.items import Date
-from tomlkit.items import DateTime
-from tomlkit.items import Float
-from tomlkit.items import Integer
-from tomlkit.items import Key
-from tomlkit.items import Table
-from tomlkit.items import Time
+from tomlkit import items
 
 
 def json_serial(obj):
@@ -46,7 +38,7 @@ def json_serial(obj):
     ],
 )
 def test_parse_can_parse_valid_toml_files(example, example_name):
-    assert isinstance(loads(example(example_name)), Table)
+    assert isinstance(loads(example(example_name)), items.table)
 
 
 @pytest.mark.parametrize("example_name", ["0.5.0", "pyproject"])
@@ -121,43 +113,43 @@ def test_a_raw_dict_can_be_dumped():
 def test_integer():
     i = parsers.numdate.parse("34")
 
-    assert isinstance(i, Integer)
+    assert isinstance(i, items.integer)
 
 
 def test_float():
     f = parsers.numdate.parse("34.56")
 
-    assert isinstance(f, Float)
+    assert isinstance(f, items.float)
 
 
 def test_boolean():
     b = parsers.boolean.parse("true")
 
-    assert isinstance(b, Bool)
+    assert isinstance(b, items.boolean)
 
 
 def test_date():
     dt = parsers.numdate.parse("1979-05-13")
 
-    assert isinstance(dt, Date)
+    assert isinstance(dt, items.date)
 
 
 def test_time():
     dt = parsers.numdate.parse("12:34:56")
 
-    assert isinstance(dt, Time)
+    assert isinstance(dt, items.time)
 
 
 def test_datetime():
     dt = parsers.numdate.parse("1979-05-13T12:34:56")
 
-    assert isinstance(dt, DateTime)
+    assert isinstance(dt, items.datetime)
 
 
 def test_array():
     a = parsers.array.parse("[1,2, 3]")
 
-    assert isinstance(a, Array)
+    assert isinstance(a, items.array)
 
 
 def test_table():
@@ -170,7 +162,7 @@ def test_table():
         )
     )
 
-    assert isinstance(t, Table)
+    assert isinstance(t, items.table)
 
     t = parsers.table.parse(
         dedent(
@@ -184,13 +176,13 @@ def test_table():
         )
     )
 
-    assert isinstance(t, Table)
+    assert isinstance(t, items.table)
 
 
 def test_inline_table():
     t = parsers.inlinetable.parse("{a = 1, b = 2}")
 
-    assert isinstance(t, Table)
+    assert isinstance(t, items.table)
 
 
 def test_aot():
@@ -209,20 +201,20 @@ def test_aot():
         )
     )
 
-    assert isinstance(t, Table)
-    assert isinstance(t["foo"], Array)
-    assert t["foo"].type == Table
+    assert isinstance(t, items.table)
+    assert isinstance(t["foo"], items.array)
+    assert t["foo"].type == items.table
 
 
 def test_key():
     k = parsers.key.parse("foo")
 
-    assert isinstance(k, Key)
+    assert isinstance(k, items.key)
 
     ks = parsers.keys.parse("foo.bar.baz =")
 
     assert isinstance(ks, tuple)
-    assert all(isinstance(k, Key) for k in ks)
+    assert all(isinstance(k, items.key) for k in ks)
 
 
 def test_string():
