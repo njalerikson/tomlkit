@@ -536,10 +536,8 @@ class TableFactory:
                     type, value = value
 
                 # process value as mapping if the type is mapping OR the value is a Mapping
-                if (
-                    self.__class__.mapping
-                    and type is self.__class__.mapping
-                    or isinstance(value, Mapping)
+                if self.__class__.mapping and (
+                    type is self.__class__.mapping or isinstance(value, Mapping)
                 ):
                     insert_link(True)
                     value = self.__class__.mapping(
@@ -547,9 +545,8 @@ class TableFactory:
                     )
 
                 # process value as sequence if the type is sequence OR the value is a Sequence
-                elif (
-                    self.__class__.sequence
-                    and type is self.__class__.sequence
+                elif self.__class__.sequence and (
+                    type is self.__class__.sequence
                     or (
                         isinstance(value, Sequence)
                         and not isinstance(value, (str, tuple))
@@ -1044,9 +1041,8 @@ class ArrayFactory:
                     type, value = value
 
                 # process value as mapping if the type is mapping OR the value is a Mapping
-                if (
-                    self.__class__.mapping
-                    and type is self.__class__.mapping
+                if self.__class__.mapping and (
+                    type is self.__class__.mapping
                     or (
                         isinstance(value, Mapping)
                         and self.type in (None, self.__class__.mapping)
@@ -1058,9 +1054,8 @@ class ArrayFactory:
                     )
 
                 # process value as sequence if the type is sequence OR the value is a Sequence
-                elif (
-                    self.__class__.sequence
-                    and type is self.__class__.sequence
+                elif self.__class__.sequence and (
+                    type is self.__class__.sequence
                     or (
                         isinstance(value, Sequence)
                         and not isinstance(value, (str, tuple))
