@@ -26,7 +26,7 @@ class StringType(Enum):
 
         maximum = len(OC) - 1
         minimum = -len(OC)
-        index = min(minimum, max(index, maximum))
+        index = max(minimum, min(index, maximum))
         return OC[index]
 
     @property
