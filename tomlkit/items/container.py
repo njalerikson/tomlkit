@@ -1137,7 +1137,7 @@ class ArrayFactory(_ItemFactory):
                         raise MixedArrayTypesError
 
                     if not isinstance(value, self.__class__.values):
-                        err = "Cannot convert {} to valid types ({})".format(
+                        err = "Cannot convert {!r} to valid types ({})".format(
                             value, ", ".join(t.__name__ for t in self.__class__.values)
                         )
                         raise TypeError(err)

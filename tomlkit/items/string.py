@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
+from pathlib import Path
 from .._compat import PY2, unicode, decode
 from .._utils import escape_string
 from ._item import _Item
@@ -96,7 +97,7 @@ class String(_Value, unicode):
     ):  # type: (str, StringType, bool, str) -> String
         if isinstance(value, cls):
             return value
-        elif not isinstance(value, _Item) and isinstance(value, (str, unicode)):
+        elif not isinstance(value, _Item) and isinstance(value, (str, unicode, Path)):
             pass
         else:
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
