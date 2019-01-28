@@ -72,12 +72,12 @@ class TOMLParserFactory:
         loc.pop("self")
         loc.pop("items")
         loc.pop("kwargs")
+        loc.update(kwargs)
+
         # since child classes are calling super they will be implicitly defining the
         # __class__ variable, remove it if it happens to exist
         # https://docs.python.org/3/reference/datamodel.html#creating-the-class-object
         loc.pop("__class__", None)
-
-        loc.update(kwargs)
 
         self.set_parsers(loc)
         self.link_parsers(loc)
