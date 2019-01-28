@@ -42,6 +42,48 @@ def _check_attrs(obj, names):
 
 
 class TOMLFactory:
+    def __init__(
+        self,
+        inline_comment=Comment,
+        comment=Comment,
+        newline=Newline,
+        key=Key,
+        hiddenkey=HiddenKey,
+        boolean=Boolean,
+        string=String,
+        datetime=DateTime,
+        date=Date,
+        time=Time,
+        integer=Integer,
+        float=Float,
+        array=ArrayFactory,
+        array_key="hiddenkey",
+        array_values=("bool", "str", "datetime", "date", "time", "int", "float"),
+        array_mapping="table",
+        array_sequence="array",
+        table=TableFactory,
+        table_key="key",
+        table_values=("bool", "str", "datetime", "date", "time", "int", "float"),
+        table_mapping="table",
+        table_sequence="array",
+        **kwargs
+    ):
+        loc = locals()
+        loc.pop("self")
+        loc.pop("kwargs")
+        # since child classes are calling super they will be implicitly defining the
+        # __class__ variable, remove it if it happens to exist
+        # https://docs.python.org/3/reference/datamodel.html#creating-the-class-object
+        loc.pop("__class__", None)
+
+        loc.update(kwargs)
+
+        self.set_items(loc)
+        self.link_items(loc)
+
+        if loc:
+            raise TypeError("got unknown values {}".format(list(loc.keys())))
+
     def set_items(self, kwargs):
         # store the core items
         self.inline_comment = _check_item(
@@ -74,43 +116,6 @@ class TOMLFactory:
         self.table.values = _check_attrs(self, kwargs.pop("table_values"))
         self.table.mapping = _check_attr(self, kwargs.pop("table_mapping"))
         self.table.sequence = _check_attr(self, kwargs.pop("table_sequence"))
-
-    def __init__(
-        self,
-        inline_comment=Comment,
-        comment=Comment,
-        newline=Newline,
-        key=Key,
-        hiddenkey=HiddenKey,
-        boolean=Boolean,
-        string=String,
-        datetime=DateTime,
-        date=Date,
-        time=Time,
-        integer=Integer,
-        float=Float,
-        array=ArrayFactory,
-        array_key="hiddenkey",
-        array_values=("bool", "str", "datetime", "date", "time", "int", "float"),
-        array_mapping="table",
-        array_sequence="array",
-        table=TableFactory,
-        table_key="key",
-        table_values=("bool", "str", "datetime", "date", "time", "int", "float"),
-        table_mapping="table",
-        table_sequence="array",
-        **kwargs
-    ):
-        loc = locals()
-        loc.pop("self")
-        loc.pop("kwargs")
-        loc.update(kwargs)
-
-        self.set_items(loc)
-        self.link_items(loc)
-
-        if loc:
-            raise TypeError("got unknown values {}".format(list(loc.keys())))
 
 
 default = TOMLFactory()

@@ -30,6 +30,63 @@ def _check_attrs(obj, names):
 
 
 class TOMLParserFactory:
+    def __init__(
+        self,
+        items=items,
+        inline_comment=CommentParser,
+        comment=CommentParser,
+        key=KeyParser,
+        keys=ItemKeysParser,
+        keys_key="key",
+        tablekeys=TableKeysParser,
+        tablekeys_key="key",
+        tablekeys_inline_comment="inline_comment",
+        boolean=BooleanParser,
+        string=StringParser,
+        string_multi=True,
+        numdate=NumDateParser,
+        array=ArrayParser,
+        array_inline_comment="inline_comment",
+        array_comment="comment",
+        array_values=("bool", "str", "numdate"),
+        array_mapping="inlinetable",
+        array_sequence="array",
+        inlinetable=InlineTableParser,
+        inlinetable_inline_comment=False,
+        inlinetable_comment=False,
+        inlinetable_key="keys",
+        inlinetable_values=("bool", "str", "numdate"),
+        inlinetable_mapping="inlinetable",
+        inlinetable_sequence="array",
+        table=TableParser,
+        table_inline_comment="inline_comment",
+        table_comment="comment",
+        table_key="keys",
+        table_tablekey="tablekeys",
+        table_values=("bool", "str", "numdate"),
+        table_mapping="inlinetable",
+        table_sequence="array",
+        **kwargs,
+    ):
+        loc = locals()
+        loc.pop("self")
+        loc.pop("items")
+        loc.pop("kwargs")
+        # since child classes are calling super they will be implicitly defining the
+        # __class__ variable, remove it if it happens to exist
+        # https://docs.python.org/3/reference/datamodel.html#creating-the-class-object
+        loc.pop("__class__", None)
+
+        loc.update(kwargs)
+
+        self.set_parsers(loc)
+        self.link_parsers(loc)
+
+        if loc:
+            raise TypeError("got unknown values {}".format(list(loc.keys())))
+
+        self.set_items(items)
+
     def set_parsers(self, kwargs):
         # store the core parsers
         self.inline_comment = _check_parser(
@@ -108,58 +165,6 @@ class TOMLParserFactory:
         self.inlinetable.klass = items.table
         self.table.klass = items.table
         self.table.newline = items.newline
-
-    def __init__(
-        self,
-        items=items,
-        inline_comment=CommentParser,
-        comment=CommentParser,
-        key=KeyParser,
-        keys=ItemKeysParser,
-        keys_key="key",
-        tablekeys=TableKeysParser,
-        tablekeys_key="key",
-        tablekeys_inline_comment="inline_comment",
-        boolean=BooleanParser,
-        string=StringParser,
-        string_multi=True,
-        numdate=NumDateParser,
-        array=ArrayParser,
-        array_inline_comment="inline_comment",
-        array_comment="comment",
-        array_values=("bool", "str", "numdate"),
-        array_mapping="inlinetable",
-        array_sequence="array",
-        inlinetable=InlineTableParser,
-        inlinetable_inline_comment=False,
-        inlinetable_comment=False,
-        inlinetable_key="keys",
-        inlinetable_values=("bool", "str", "numdate"),
-        inlinetable_mapping="inlinetable",
-        inlinetable_sequence="array",
-        table=TableParser,
-        table_inline_comment="inline_comment",
-        table_comment="comment",
-        table_key="keys",
-        table_tablekey="tablekeys",
-        table_values=("bool", "str", "numdate"),
-        table_mapping="inlinetable",
-        table_sequence="array",
-        **kwargs,
-    ):
-        loc = locals()
-        loc.pop("self")
-        loc.pop("items")
-        loc.pop("kwargs")
-        loc.update(kwargs)
-
-        self.set_parsers(loc)
-        self.link_parsers(loc)
-
-        if loc:
-            raise TypeError("got unknown values {}".format(list(loc.keys())))
-
-        self.set_items(items)
 
 
 default = TOMLParserFactory()
