@@ -304,7 +304,20 @@ class _KVSM(_Container, metaclass=_KVSMMeta):
         pass
 
 
-class _Table(_KVSM, dict):
+class _TableMeta(_KVSMMeta):
+    def inline():
+        def fget(self):
+            return self._inline
+
+        def fset(self, value):
+            self._inline = bool(value)
+
+        return locals()
+
+    inline = property(**inline())
+
+
+class _Table(_KVSM, dict, metaclass=_TableMeta):
     pass
 
 
@@ -368,9 +381,13 @@ class TableFactory(_ItemFactory):
             @property
             def _complexity(self):
                 # a table has a base complexity if:
-                #      the _complex value is set
+                #      the class inline is False
+                #   or the _complex value is set
                 #   or if self if root
                 #   or self has a derived complexity
+                if not self.__class__.inline:
+                    return True
+
                 try:
                     return self._complex
                 except AttributeError:

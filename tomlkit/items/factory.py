@@ -62,6 +62,7 @@ class TOMLFactory:
         array_mapping="table",
         array_sequence="array",
         table=TableFactory,
+        table_inline=True,
         table_key="key",
         table_values=("bool", "str", "datetime", "date", "time", "int", "float"),
         table_mapping="table",
@@ -112,6 +113,7 @@ class TOMLFactory:
         self.array.mapping = _check_attr(self, kwargs.pop("array_mapping"))
         self.array.sequence = _check_attr(self, kwargs.pop("array_sequence"))
 
+        self.table.inline = _check_attr(self, kwargs.pop("table_inline"))
         self.table.key = _check_attr(self, kwargs.pop("table_key"))
         self.table.values = _check_attrs(self, kwargs.pop("table_values"))
         self.table.mapping = _check_attr(self, kwargs.pop("table_mapping"))
