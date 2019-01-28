@@ -145,16 +145,19 @@ class TOMLParserFactory:
         table_values=("bool", "str", "numdate"),
         table_mapping="inlinetable",
         table_sequence="array",
+        **kwargs,
     ):
-        kwargs = locals()
-        kwargs.pop("self")
-        kwargs.pop("items")
+        loc = locals()
+        loc.pop("self")
+        loc.pop("items")
+        loc.pop("kwargs")
+        loc.update(kwargs)
 
-        self.set_parsers(kwargs)
-        self.link_parsers(kwargs)
+        self.set_parsers(loc)
+        self.link_parsers(loc)
 
-        if kwargs:
-            raise TypeError("got unknown values {}".format(list(kwargs.keys())))
+        if loc:
+            raise TypeError("got unknown values {}".format(list(loc.keys())))
 
         self.set_items(items)
 

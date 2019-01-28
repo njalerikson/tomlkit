@@ -99,15 +99,18 @@ class TOMLFactory:
         table_values=("bool", "str", "datetime", "date", "time", "int", "float"),
         table_mapping="table",
         table_sequence="array",
+        **kwargs
     ):
-        kwargs = locals()
-        kwargs.pop("self")
+        loc = locals()
+        loc.pop("self")
+        loc.pop("kwargs")
+        loc.update(kwargs)
 
-        self.set_items(kwargs)
-        self.link_items(kwargs)
+        self.set_items(loc)
+        self.link_items(loc)
 
-        if kwargs:
-            raise TypeError("got unknown values {}".format(list(kwargs.keys())))
+        if loc:
+            raise TypeError("got unknown values {}".format(list(loc.keys())))
 
 
 default = TOMLFactory()
