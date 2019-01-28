@@ -590,6 +590,12 @@ class TableFactory(_ItemFactory):
 
                 # this is a normal value, process using the value types
                 else:
+                    # objects may have __toml__ which defines how object is converted
+                    try:
+                        value = value.__toml__()
+                    except AttributeError:
+                        pass
+
                     insert_link(False)
                     for type in self.__class__.values:
                         try:
@@ -1125,6 +1131,12 @@ class ArrayFactory(_ItemFactory):
 
                 # this is a normal value, process using the value types
                 else:
+                    # objects may have __toml__ which defines how object is converted
+                    try:
+                        value = value.__toml__()
+                    except AttributeError:
+                        pass
+
                     insert_link(False)
                     for type in self.__class__.values:
                         try:
