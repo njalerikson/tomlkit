@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 from ._item import _Item
 from ._itemfactory import _ItemFactory
-
 from ._hidden import Comment, Newline
-
+from ._utils import flatten
 from .key import Key, HiddenKey
-
 from .boolean import Boolean
 from .string import String
 from .date import Date
@@ -118,6 +116,25 @@ class TOMLFactory:
         self.table.values = _check_attrs(self, kwargs.pop("table_values"))
         self.table.mapping = _check_attr(self, kwargs.pop("table_mapping"))
         self.table.sequence = _check_attr(self, kwargs.pop("table_sequence"))
+
+    # converts Python object into TOML object
+    def toml(self, data=None, *, base=None):
+        base = self.table if base is None else base
+        try:
+            if not issubclass(base, _Item):
+                raise TypeError
+        except TypeError:
+            raise TypeError("base must be an _Item")
+        else:
+            return base({} if data is None else data)
+
+    # converts TOML object (using a base node) into TOML document (str)
+    def dumps(self, obj, **kwargs):
+        # ensure data is valid according to base
+        data = self.toml(obj, **kwargs)
+
+        # flatten data into string
+        return flatten(data)
 
 
 default = TOMLFactory()

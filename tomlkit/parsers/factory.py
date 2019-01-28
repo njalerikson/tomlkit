@@ -166,5 +166,15 @@ class TOMLParserFactory:
         self.table.klass = items.table
         self.table.newline = items.newline
 
+    # converts TOML document (str) into TOML object
+    def loads(self, src, *, base=None):
+        base = self.table if base is None else base
+        if not isinstance(base, _Parser):
+            raise TypeError("base must be a _Parser")
+
+        return base.parse(src)
+
+    parse = loads
+
 
 default = TOMLParserFactory()
