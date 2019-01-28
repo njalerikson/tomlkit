@@ -20,7 +20,7 @@ class _Link(object):
         except AttributeError:
             pass
 
-        raise TypeError("unhashable type: '{}'".format(self.__class__.__name__))
+        raise TypeError("unhashable type: {!r}".format(self.__class__.__name__))
 
     def __repr__(self):
         try:
@@ -579,7 +579,7 @@ class TableFactory(_ItemFactory):
                 elif type:
                     if not issubclass(type, _Value):
                         raise TypeError(
-                            "Cannot convert {} to valid types ({})".format(
+                            "Cannot convert {!r} to valid types ({})".format(
                                 value,
                                 ", ".join(v.__name__ for v in self.__class__.values),
                             )
@@ -599,7 +599,7 @@ class TableFactory(_ItemFactory):
                             pass
 
                     if not isinstance(value, self.__class__.values):
-                        err = "Cannot convert {} to valid types ({})".format(
+                        err = "Cannot convert {!r} to valid types ({})".format(
                             value, ", ".join(t.__name__ for t in self.__class__.values)
                         )
                         raise TypeError(err)
@@ -1114,7 +1114,7 @@ class ArrayFactory(_ItemFactory):
 
                     if not issubclass(type, _Value):
                         raise TypeError(
-                            "Cannot convert {} to valid types ({})".format(
+                            "Cannot convert {!r} to valid types ({})".format(
                                 value,
                                 ", ".join(s.__name__ for s in self.__class__.values),
                             )
@@ -1273,7 +1273,9 @@ class ArrayFactory(_ItemFactory):
             def __iadd__(self, other):
                 if not isinstance(other, Sequence) or isinstance(other, str):
                     raise TypeError(
-                        "can only concatenate list (not {}) to list".foramt(type(other))
+                        "can only concatenate list (not {!r}) to list".foramt(
+                            type(other)
+                        )
                     )
 
                 self.extend(other)
