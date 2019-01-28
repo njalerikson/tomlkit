@@ -42,8 +42,42 @@ def _check_attrs(obj, names):
 
 
 class TOMLFactory:
+    def set_items(self, kwargs):
+        # store the core items
+        self.inline_comment = _check_item(
+            "inline_comment", kwargs.pop("inline_comment")
+        )
+        self.comment = _check_item("comment", kwargs.pop("comment"))
+        self.nl = self.newline = _check_item("newline", kwargs.pop("newline"))
+
+        self.key = _check_item("key", kwargs.pop("key"))
+        self.hiddenkey = _check_item("hiddenkey", kwargs.pop("hiddenkey"))
+
+        self.bool = self.boolean = _check_item("boolean", kwargs.pop("boolean"))
+        self.str = self.string = _check_item("string", kwargs.pop("string"))
+        self.datetime = _check_item("datetime", kwargs.pop("datetime"))
+        self.date = _check_item("date", kwargs.pop("date"))
+        self.time = _check_item("time", kwargs.pop("time"))
+        self.int = self.integer = _check_item("integer", kwargs.pop("integer"))
+        self.float = _check_item("float", kwargs.pop("float"))
+        self.array = _check_item("array", kwargs.pop("array"))
+        self.table = _check_item("table", kwargs.pop("table"))
+
+    def link_items(self, kwargs):
+        # link items together
+        self.array.key = _check_attr(self, kwargs.pop("array_key"))
+        self.array.values = _check_attrs(self, kwargs.pop("array_values"))
+        self.array.mapping = _check_attr(self, kwargs.pop("array_mapping"))
+        self.array.sequence = _check_attr(self, kwargs.pop("array_sequence"))
+
+        self.table.key = _check_attr(self, kwargs.pop("table_key"))
+        self.table.values = _check_attrs(self, kwargs.pop("table_values"))
+        self.table.mapping = _check_attr(self, kwargs.pop("table_mapping"))
+        self.table.sequence = _check_attr(self, kwargs.pop("table_sequence"))
+
     def __init__(
         self,
+        inline_comment=Comment,
         comment=Comment,
         newline=Newline,
         key=Key,
@@ -66,33 +100,14 @@ class TOMLFactory:
         table_mapping="table",
         table_sequence="array",
     ):
-        # store the core items
-        self.comment = _check_item("comment", comment)
-        self.nl = self.newline = _check_item("newline", newline)
+        kwargs = locals()
+        kwargs.pop("self")
 
-        self.key = _check_item("key", key)
-        self.hiddenkey = _check_item("hiddenkey", hiddenkey)
+        self.set_items(kwargs)
+        self.link_items(kwargs)
 
-        self.bool = self.boolean = _check_item("boolean", boolean)
-        self.str = self.string = _check_item("string", string)
-        self.datetime = _check_item("datetime", datetime)
-        self.date = _check_item("date", date)
-        self.time = _check_item("time", time)
-        self.int = self.integer = _check_item("integer", integer)
-        self.float = _check_item("float", float)
-        self.array = _check_item("array", array)
-        self.table = _check_item("table", table)
-
-        # link items together
-        self.array.key = _check_attr(self, array_key)
-        self.array.values = _check_attrs(self, array_values)
-        self.array.mapping = _check_attr(self, array_mapping)
-        self.array.sequence = _check_attr(self, array_sequence)
-
-        self.table.key = _check_attr(self, table_key)
-        self.table.values = _check_attrs(self, table_values)
-        self.table.mapping = _check_attr(self, table_mapping)
-        self.table.sequence = _check_attr(self, table_sequence)
+        if kwargs:
+            raise TypeError("got unknown values {}".format(list(kwargs.keys())))
 
 
 default = TOMLFactory()

@@ -8,6 +8,7 @@ __all__ = ["toml", "pyobj", "flatten", "dumps"]
 
 
 # expose default
+inline_comment = default.inline_comment
 comment = default.comment
 nl = newline = default.newline
 
