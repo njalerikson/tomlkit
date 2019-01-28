@@ -17,9 +17,9 @@ hiddenkey = default.hiddenkey
 
 bool = boolean = default.boolean
 str = string = default.string
+datetime = default.datetime
 date = default.date
 time = default.time
-datetime = default.datetime
 int = integer = default.integer
 float = default.float
 array = default.array

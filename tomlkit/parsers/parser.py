@@ -739,7 +739,12 @@ class _ValuesParser(_ContainerParser):
     comment = property(**comment())
 
     def __inst__(self, src, parent=None, key=None):
-        for parser in (*self.values, self.mapping, self.sequence):
+        parsers = list(self.values)
+        if self.mapping:
+            parsers.append(self.mapping)
+        if self.sequence:
+            parsers.append(self.sequence)
+        for parser in parsers:
             check = parser.__check__(src)
             if check is None:
                 continue
