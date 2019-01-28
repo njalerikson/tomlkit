@@ -42,7 +42,7 @@ def test_items_can_be_appended_to_and_removed_from_a_table():
     assert table.complexity is True
     assert flatten(table) == ""
 
-    table["foo"] = items.string("bar", items.StringType.BASIC)
+    table["foo"] = items.string("bar", items.string.types.BASIC)
 
     assert flatten(table) == dedent(
         """\
@@ -94,7 +94,7 @@ def test_items_can_be_appended_to_and_removed_from_an_inline_table():
     assert table.complexity is False
     assert flatten(table) == "{}"
 
-    table["foo"] = items.string("bar", items.StringType.BASIC)
+    table["foo"] = items.string("bar", items.string.types.BASIC)
 
     assert flatten(table) == '{foo = "bar"}'
 
@@ -155,7 +155,7 @@ def test_hex_octal_and_bin_integers_are_supported(example):
 def test_key_automatically_sets_proper_string_type_if_not_bare():
     key = items.key("foo.bar")
 
-    assert key._t == items.KeyType.BASIC
+    assert key._t == items.key.types.BASIC
 
 
 def test_array_behaves_like_a_list():

@@ -5,6 +5,7 @@ from ._utils import pyobj, flatten
 from ._hidden import _Hidden, Comment, Newline
 from ._trivia import _Value, _Container, _TriviaMeta
 from ._key import _Key
+from ._itemfactory import _ItemFactory
 
 
 class _Link(object):
@@ -311,7 +312,7 @@ class _Array(_KVSM, list):
     pass
 
 
-class TableFactory:
+class TableFactory(_ItemFactory):
     def __new__(cls):
         class Table(_Table):
             # self[key] = link
@@ -856,7 +857,7 @@ class TableFactory:
         return Table
 
 
-class ArrayFactory:
+class ArrayFactory(_ItemFactory):
     def __new__(cls):
         class Array(_Array):
             # self[index] = link
@@ -972,25 +973,47 @@ class ArrayFactory:
 
             complexity = property(**complexity())
 
-            def __getitem__(self, index, infer=False):
+            def _getitem(self, index, **kwargs):
                 if isinstance(index, slice):
-                    return [self[i] for i in range(index.start, index.stop, index.step)]
+                    return [
+                        self._getitem(i)
+                        for i in range(index.start, index.stop, index.step)
+                    ]
 
                 rindex = ()
                 if isinstance(index, tuple):
                     index, *rindex = index
                     rindex = tuple(rindex)
 
-                if infer and not isinstance(index, int):
+                if kwargs.get("infer") and not isinstance(index, int):
                     rindex = (index, *rindex)
                     index = -1
 
-                link = super(Array, self).__getitem__(index)
+                try:
+                    link = super(Array, self).__getitem__(index)
+                except KeyError:
+                    if "default" in kwargs:
+                        return (None,), kwargs["default"]
+                    raise
+
                 value = self._value_map[link]
 
                 if rindex:
-                    return value.__getitem__(rindex, infer=infer)
-                return value
+                    rindex, value = value._getitem(rindex, **kwargs)
+                    return (link.key[-1], *rindex), value
+                return (link.key[-1],), value
+
+            def __getitem__(self, index, infer=False):
+                return self._getitem(index, infer=infer)[1]
+
+            def getitem(self, index, default=None, infer=False):
+                index, value = self._getitem(index, default=default, infer=infer)
+                if len(index) > 1:
+                    return index, value
+                return index[0], value
+
+            def get(self, index, default=None, infer=False):
+                return self._getitem(index, default=default, infer=infer)[1]
 
             # allow scope to be passed in, just don't use it
             def __setitem__(self, index, value, scope=None, infer=False):

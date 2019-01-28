@@ -56,14 +56,14 @@ class StringType(Enum):
             return StringType.LITERAL
 
 
-def check_t(t):
+def check_t(types, t):
     if t is None:
-        return StringType.BASIC
+        return types.BASIC
 
     try:
-        return StringType(t)
+        return types(t)
     except ValueError:
-        return StringType.lookup(t)
+        return types.lookup(t)
 
 
 def check_multi(value, multi):
@@ -73,13 +73,13 @@ def check_multi(value, multi):
     return "\n" in value
 
 
-def check_raw(value, t, multi, raw):
+def check_raw(value, types, t, multi, raw):
     if raw is not None:
         return raw
 
     count = 3 if multi else 1
 
-    if t is StringType.BASIC:
+    if t is types.BASIC:
         # escape_string decodes
         txt = escape_string(value, nl=not multi)
     else:
@@ -89,6 +89,7 @@ def check_raw(value, t, multi, raw):
 
 class String(_Value, unicode):
     __slots__ = ["_t", "_multi", "_raw"]
+    types = StringType
 
     def __new__(
         cls, value, t=None, multi=None, _raw=None
@@ -101,9 +102,9 @@ class String(_Value, unicode):
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
         self = super(String, cls).__new__(cls, value)
-        self._t = t = check_t(t)
+        self._t = t = check_t(self.types, t)
         self._multi = multi = check_multi(self, multi)
-        self._raw = _raw = check_raw(self, t, multi, _raw)
+        self._raw = _raw = check_raw(self, self.types, t, multi, _raw)
         return self
 
     def __init__(

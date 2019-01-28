@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from .._utils import _escaped, chars
-from ..exceptions import InvalidCharInStringError
+from ..exceptions import InvalidCharInStringError, UnexpectedCharError
 
 
 def parse_word(word, src):
@@ -111,3 +111,8 @@ def parse_string(style, src, multi=True):
 
             # consume this char, EOF here is an issue (middle of string)
             src.inc(exception=True)
+
+
+def consume_nl(src):
+    if src.consume(chars.nl, max=1) == 0 and not src.end():
+        raise src.parse_error(UnexpectedCharError(src.current))

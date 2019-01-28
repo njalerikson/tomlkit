@@ -65,35 +65,35 @@ class KeyType(Enum):
             return KeyType.LITERAL
 
 
-def check_t(value, t):
+def check_t(value, types, t):
     if any(c not in chars.bare for c in value):
         # something in key is non-bare char
         if t is None:
-            return KeyType.BASIC
+            return types.BASIC
 
         try:
-            t = KeyType(t)
+            t = types(t)
         except ValueError:
-            t = KeyType.lookup(t)
+            t = types.lookup(t)
 
-        assert t != KeyType.BARE
+        assert t != types.BARE
         return t
     else:
         # entire key is composed of bare chars
         if t is None:
-            return KeyType.BARE
+            return types.BARE
 
         try:
-            return KeyType(t)
+            return types(t)
         except ValueError:
-            return KeyType.lookup(t)
+            return types.lookup(t)
 
 
-def check_raw(value, t, raw):
+def check_raw(value, types, t, raw):
     if raw is not None:
         return raw
 
-    if t is KeyType.BASIC:
+    if t is types.BASIC:
         # escape_string decodes
         txt = escape_string(value, nl=True)
     else:
@@ -103,6 +103,7 @@ def check_raw(value, t, raw):
 
 class Key(_Key, unicode):
     __slots__ = ["_t", "_raw"]
+    types = KeyType
 
     def __new__(cls, value, t=None, _raw=None):  # type: (str, KeyType, str) -> Key
         if isinstance(value, cls):
@@ -113,8 +114,8 @@ class Key(_Key, unicode):
             raise TypeError("Cannot convert {} to {}".format(value, cls.__name__))
 
         self = super(Key, cls).__new__(cls, value)
-        self._t = t = check_t(self, t)
-        self._raw = _raw = check_raw(self, t, _raw)
+        self._t = t = check_t(self, self.types, t)
+        self._raw = _raw = check_raw(self, self.types, t, _raw)
         return self
 
     def __init__(self, value, t=None, _raw=None):  # type: (str, KeyType, str) -> None

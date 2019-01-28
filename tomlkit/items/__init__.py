@@ -1,56 +1,28 @@
 # -*- coding: utf-8 -*-
 from ._item import _Item
-from ._key import _Key  # noqa: F401
-from ._hidden import Comment, Newline
-from ._trivia import _Trivia, _Value, _Container  # noqa: F401
-
-from .key import Key, HiddenKey
-from .key import KeyType  # noqa: F401
-
-from .boolean import Boolean
-from .string import String
-from .string import StringType  # noqa: F401
-from .date import Date
-from .time import Time
-from .datetime import DateTime
-from .integer import Integer
-from .float import Float
-
-from .container import ArrayFactory, TableFactory
-
 from ._utils import pyobj, flatten
+from .factory import default
 
 
 __all__ = ["toml", "pyobj", "flatten", "dumps"]
 
 
-# link types together
-comment = Comment
-nl = newline = Newline
+# expose default
+comment = default.comment
+nl = newline = default.newline
 
-key = Key
-hiddenkey = HiddenKey
+key = default.key
+hiddenkey = default.hiddenkey
 
-bool = boolean = Boolean
-str = string = String
-date = Date
-time = Time
-datetime = DateTime
-int = integer = Integer
-float = Float
-
-array = ArrayFactory()
-table = TableFactory()
-
-array.key = hiddenkey
-array.values = (boolean, string, datetime, date, time, integer, float)
-array.mapping = table
-array.sequence = array
-
-table.key = key
-table.values = (boolean, string, datetime, date, time, integer, float)
-table.mapping = table
-table.sequence = array
+bool = boolean = default.boolean
+str = string = default.string
+date = default.date
+time = default.time
+datetime = default.datetime
+int = integer = default.integer
+float = default.float
+array = default.array
+table = default.table
 
 
 # converts Python object into TOML object
