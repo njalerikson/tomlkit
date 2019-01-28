@@ -208,7 +208,9 @@ class _KVSMMeta(_TriviaMeta):
             return self._key
 
         def fset(self, value):
-            if not issubclass(value, _Key):
+            if value in (None, False):
+                value = None
+            elif not issubclass(value, _Key):
                 raise TypeError("key must be a _Key, not {!r}".format(value))
             self._key = value
 
@@ -218,17 +220,17 @@ class _KVSMMeta(_TriviaMeta):
 
     def values():
         def fget(self):
-            try:
-                return self._values
-            except AttributeError:
-                return ()
+            return self._values
 
         def fset(self, value):
-            value = tuple(value)
-            if not all(issubclass(v, _Value) for v in value):
-                raise TypeError(
-                    "values must be an iterable of _Value, not {!r}".format(value)
-                )
+            if value in (None, False):
+                value = ()
+            else:
+                value = tuple(value)
+                if not all(issubclass(v, _Value) for v in value):
+                    raise TypeError(
+                        "values must be an iterable of _Value, not {!r}".format(value)
+                    )
             self._values = value
 
         return locals()
@@ -237,13 +239,12 @@ class _KVSMMeta(_TriviaMeta):
 
     def sequence():
         def fget(self):
-            try:
-                return self._sequence
-            except AttributeError:
-                return None
+            return self._sequence
 
         def fset(self, value):
-            if not (issubclass(value, _Container) and issubclass(value, Sequence)):
+            if value in (None, False):
+                value = None
+            elif not (issubclass(value, _Container) and issubclass(value, Sequence)):
                 raise TypeError(
                     "sequence must be a Sequence/_Container, not {!r}".format(value)
                 )
@@ -255,13 +256,12 @@ class _KVSMMeta(_TriviaMeta):
 
     def mapping():
         def fget(self):
-            try:
-                return self._mapping
-            except AttributeError:
-                return None
+            return self._mapping
 
         def fset(self, value):
-            if not (issubclass(value, _Container) and issubclass(value, Mapping)):
+            if value in (None, False):
+                value = None
+            elif not (issubclass(value, _Container) and issubclass(value, Mapping)):
                 raise TypeError(
                     "mapping must be a Mapping/_Container, not {!r}".format(value)
                 )
