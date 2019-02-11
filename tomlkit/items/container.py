@@ -274,7 +274,7 @@ class _KVSMMeta(_TriviaMeta):
 
 class _KVSM(_Container, metaclass=_KVSMMeta):
     def __new__(cls, value=None, parent=None, handle=None):
-        if isinstance(value, cls):
+        if isinstance(value, cls) and value._parent is None and parent is None:
             return value, False
 
         self = super(_KVSM, cls).__new__(cls)
